@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(lemac LANGUAGES C CXX)
+project(lemac LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(lemac
-    src/lemac.c
+    src/lemac.cpp
     src/lemac.h)
 target_compile_options(lemac PRIVATE -maes -msse2)
 
