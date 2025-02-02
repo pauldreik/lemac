@@ -23,26 +23,20 @@ along with this software. If not, see
 
 #include <stdint.h>
 #include <immintrin.h>
+#include <wmmintrin.h>
 #include <string.h>
+
+#include "lemac.h"
 
 #define STATE_0 _mm_set_epi64x(0,0)
 
 #define tabsize(T) (sizeof(T)/sizeof((T)[0]))
 
-typedef struct {
-  __m128i S[9];
-} state;
-
-typedef  struct {
-  state init;
-  __m128i keys[2][11];
-  __m128i subkeys[18];
-} context;
 
 
 // AES key schedule from https://www.intel.com/content/dam/doc/white-paper/advanced-encryption-standard-new-instructions-set-paper.pdf
 
-inline __m128i AES_128_ASSIST (__m128i temp1, __m128i temp2)     {
+__m128i AES_128_ASSIST (__m128i temp1, __m128i temp2)     {
   __m128i temp3;
   temp2 = _mm_shuffle_epi32 (temp2 ,0xff);
   temp3 = _mm_slli_si128 (temp1, 0x4);
