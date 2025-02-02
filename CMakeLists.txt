@@ -12,12 +12,15 @@ target_compile_options(lemac PRIVATE -maes -msse2)
 
 target_include_directories(lemac PUBLIC src)
 
+add_subdirectory(test)
+
+
+
 add_executable(lemacsum
     src/main.cpp
 )
 
 target_link_libraries(lemacsum PRIVATE lemac)
-
 
 include(GNUInstallDirs)
 install(TARGETS lemacsum
