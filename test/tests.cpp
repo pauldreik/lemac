@@ -204,14 +204,15 @@ private:
 TEST_CASE("unaligned access") {
   constexpr auto MSIZE = 65;
 
-  auto M = unaligned_buf(1, MSIZE);
+  const auto alignment = GENERATE(0uz, 1uz, 2uz, 15uz);
+
+  auto M = unaligned_buf(alignment, MSIZE);
   auto inputdata = M.get();
 
-  auto N_ = unaligned_buf(1, 16);
+  auto N_ = unaligned_buf(alignment, 16);
   auto N = N_.get();
-  auto K_ = unaligned_buf(1, 16);
+  auto K_ = unaligned_buf(alignment, 16);
   auto K = K_.get();
-  uint8_t T[16] = {};
 
   std::iota(std::begin(inputdata), std::end(inputdata), 0);
   std::iota(std::begin(N), std::end(N), 0);
