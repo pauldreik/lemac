@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <stdint.h>
 
+#include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -230,4 +231,31 @@ TEST_CASE("unaligned access") {
   const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
   const auto actual = tohex(lm.finalize(N));
   REQUIRE(expected == actual);
+}
+
+TEST_CASE("benchmark 65 byte", "[.][benchmark]") {
+  constexpr auto MSIZE = 65;
+
+  uint8_t M[MSIZE] = {};
+  uint8_t N[16] = {};
+  uint8_t K[16] = {};
+  uint8_t T[16] = {};
+
+  std::iota(std::begin(M), std::end(M), 0);
+  std::iota(std::begin(N), std::end(N), 0);
+  std::iota(std::begin(K), std::end(K), 0);
+  BENCHMARK("original implementation") {
+    context ctx;
+    lemac_init(&ctx, K);
+    lemac_MAC(&ctx, N, M, MSIZE, T);
+    M[0] = T[0];
+    return T[0];
+  };
+  BENCHMARK("C++ implementation") {
+    LeMac lemac(std::span(K, 16));
+    lemac.update(std::span(M));
+    const auto tmp = lemac.finalize(std::span(N));
+    M[0] = tmp[0];
+    return tmp[0];
+  };
 }
