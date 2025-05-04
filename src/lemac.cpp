@@ -163,7 +163,7 @@ state lemac_AU(context* ctx, const uint8_t* m, size_t mlen) {
   /* state S = ctx->init; */
   // Padding
   size_t m_padded_len = mlen - (mlen % 64) + 64;
-  uint8_t m_padding[64];
+  alignas(16) uint8_t m_padding[64];
   memcpy(m_padding, m + (mlen / 64) * 64, mlen % 64);
   m_padding[mlen % 64] = 1;
   __m128i* M_padding = (__m128i*)m_padding;
@@ -171,8 +171,8 @@ state lemac_AU(context* ctx, const uint8_t* m, size_t mlen) {
     m_padding[i] = 0;
   }
 
-  const __m128i* M = (__m128i*)m;
-  __m128i* Mfin = (__m128i*)(m + m_padded_len - 64);
+  // const __m128i* M = (__m128i*)m;
+  //__m128i* Mfin = (__m128i*)(m + m_padded_len - 64);
 
   state S = ctx->init;
 
@@ -181,8 +181,14 @@ state lemac_AU(context* ctx, const uint8_t* m, size_t mlen) {
   __m128i R1 = STATE_0;
   __m128i R2 = STATE_0;
   // Main rounds
-  for (; M < Mfin; M += 4) {
-    ROUND(S, M[0], M[1], M[2], M[3], RR, R0, R1, R2);
+  const auto* M = m;
+  const auto* Mfin = m + m_padded_len - 64;
+  for (; M < Mfin; M += 4 * 16) {
+    const auto M0 = _mm_loadu_si128((const __m128i*)(m + 0));
+    const auto M1 = _mm_loadu_si128((const __m128i*)(m + 16));
+    const auto M2 = _mm_loadu_si128((const __m128i*)(m + 32));
+    const auto M3 = _mm_loadu_si128((const __m128i*)(m + 48));
+    ROUND(S, M0, M1, M2, M3, RR, R0, R1, R2);
   }
 
   // Last round (padding)
@@ -201,9 +207,10 @@ state lemac_AU(context* ctx, const uint8_t* m, size_t mlen) {
 void lemac_MAC(context* ctx, const uint8_t* nonce, const uint8_t* m,
                size_t mlen, uint8_t* tag) {
   state S = lemac_AU(ctx, m, mlen);
-  const __m128i* N = (const __m128i*)nonce;
+  // const __m128i* N = (const __m128i*)nonce;
+  const auto N = _mm_loadu_si128((const __m128i*)nonce);
 
-  __m128i T = *N ^ AES(ctx->keys[0], *N);
+  __m128i T = N ^ AES(ctx->keys[0], N);
   T ^= AES_modified(ctx->subkeys, S.S[0]);
   T ^= AES_modified(ctx->subkeys + 1, S.S[1]);
   T ^= AES_modified(ctx->subkeys + 2, S.S[2]);
@@ -214,7 +221,9 @@ void lemac_MAC(context* ctx, const uint8_t* nonce, const uint8_t* m,
   T ^= AES_modified(ctx->subkeys + 7, S.S[7]);
   T ^= AES_modified(ctx->subkeys + 8, S.S[8]);
 
-  *(__m128i*)tag = AES(ctx->keys[1], T);
+  // *(__m128i*)tag = AES(ctx->keys[1], T);
+  const auto tagv = AES(ctx->keys[1], T);
+  _mm_storeu_si128((__m128i*)tag, tagv);
 }
 
 LeMac::LeMac(std::span<const uint8_t, key_size> key) { init(key); }
@@ -239,18 +248,40 @@ void LeMac::init(std::span<const uint8_t, key_size> key) {
   R2 = STATE_0;
 }
 
-void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
+#define ROUND2(S, ptr, RR, R0, R1, R2)                                         \
+  do {                                                                         \
+    const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));                \
+    const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));               \
+    const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));               \
+    const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));               \
+    __m128i T = S.S[8];                                                        \
+    S.S[8] = _mm_aesenc_si128(S.S[7], M3);                                     \
+    S.S[7] = _mm_aesenc_si128(S.S[6], M1);                                     \
+    S.S[6] = _mm_aesenc_si128(S.S[5], M1);                                     \
+    S.S[5] = _mm_aesenc_si128(S.S[4], M0);                                     \
+    S.S[4] = _mm_aesenc_si128(S.S[3], M0);                                     \
+    S.S[3] = _mm_aesenc_si128(S.S[2], R1 ^ R2);                                \
+    S.S[2] = _mm_aesenc_si128(S.S[1], M3);                                     \
+    S.S[1] = _mm_aesenc_si128(S.S[0], M3);                                     \
+    S.S[0] = S.S[0] ^ T ^ M2;                                                  \
+    R2 = R1;                                                                   \
+    R1 = R0;                                                                   \
+    R0 = RR ^ M1;                                                              \
+    RR = M2;                                                                   \
+  } while (0);
+
+void LeMac::process_full_block(const uint8_t* ptr) noexcept {
   auto& S = m_state;
 
   auto& RR = m_rstate.RR;
   auto& R0 = m_rstate.R0;
   auto& R1 = m_rstate.R1;
   auto& R2 = m_rstate.R2;
-  const auto* ptr = data.data();
-  ROUND(S, _mm_loadu_si128((const __m128i*)(ptr + 0)),
-        _mm_loadu_si128((const __m128i*)(ptr + 16)),
-        _mm_loadu_si128((const __m128i*)(ptr + 32)),
-        _mm_loadu_si128((const __m128i*)(ptr + 48)), RR, R0, R1, R2);
+  const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
+  const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
+  const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
+  const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
+  ROUND(S, M0, M1, M2, M3, RR, R0, R1, R2);
 }
 
 void LeMac::update(std::span<const uint8_t> data) {
@@ -268,7 +299,7 @@ void LeMac::update(std::span<const uint8_t> data) {
     }
     // process the entire block
     std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
-    process_full_block(m_buf);
+    process_full_block(m_buf.data());
     m_bufsize = 0;
     data = data.subspan(remaining_to_full_block);
   }
@@ -278,7 +309,7 @@ void LeMac::update(std::span<const uint8_t> data) {
 
   auto ptr = data.data();
   for (; ptr != block_end; ptr += block_size) {
-    process_full_block(std::span<const uint8_t, block_size>(ptr, block_size));
+    process_full_block(ptr);
   }
 
   // write the tail into m_buf
@@ -296,23 +327,23 @@ void LeMac::finalize_to(std::span<const uint8_t> nonce,
                         std::span<uint8_t, 16> target) {
 
   // let m_buf be padded
-  m_buf.at(m_bufsize) = 1;
+  assert(m_bufsize < m_buf.size());
+  m_buf[m_bufsize] = 1;
   for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
-    m_buf.at(i) = 0;
+    m_buf[i] = 0;
   }
-  const auto* ptr = m_buf.data();
   auto& S = m_state;
   auto& RR = m_rstate.RR;
   auto& R0 = m_rstate.R0;
   auto& R1 = m_rstate.R1;
   auto& R2 = m_rstate.R2;
 
-  process_full_block(m_buf);
+  process_full_block(m_buf.data());
 
   // Four final rounds to absorb message state
-  static constexpr std::array<const std::uint8_t, block_size> zero_block{};
+  const std::array<const std::uint8_t, block_size> zero_block{};
   for (int i = 0; i < 4; ++i) {
-    process_full_block(zero_block);
+    process_full_block(zero_block.data());
   }
 
   if (nonce.size() != 16) {
@@ -333,5 +364,89 @@ void LeMac::finalize_to(std::span<const uint8_t> nonce,
   T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
 
   const auto tag = AES(m_context.keys[1], T);
-  _mm_store_si128((__m128i*)target.data(), tag);
+  _mm_storeu_si128((__m128i*)target.data(), tag);
+}
+
+void LeMac::update_and_finalize_to(std::span<const uint8_t> data,
+                                   std::span<const uint8_t> nonce,
+                                   std::span<uint8_t, 16> target) noexcept {
+  // if (m_bufsize != 0) {
+  //   // fill the remainder of m_buf from data and process a whole block if
+  //   // possible
+  //   assert(m_bufsize < block_size);
+  //   const auto remaining_to_full_block = block_size - m_bufsize;
+  //   if (data.size() < remaining_to_full_block) {
+  //     // not enough data for a full block, append to the buffer and hope for
+  //     // better luck next time
+  //     std::memcpy(&m_buf[m_bufsize], data.data(), data.size());
+  //     m_bufsize += data.size();
+  //     return;
+  //   }
+  //   // process the entire block
+  //   std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
+  //   process_full_block(m_buf.data());
+  //   m_bufsize = 0;
+  //   data = data.subspan(remaining_to_full_block);
+  // }
+  // process whole blocks
+  const auto whole_blocks = data.size() / block_size;
+  const auto block_end = data.data() + whole_blocks * block_size;
+
+  // write the tail into m_buf
+  m_bufsize = data.size() - whole_blocks * block_size;
+  std::memcpy(m_buf.data(), block_end, m_bufsize);
+  // let m_buf be padded
+  assert(m_bufsize < m_buf.size());
+  m_buf[m_bufsize] = 1;
+  for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
+    m_buf[i] = 0;
+  }
+  auto& S = m_state;
+  auto& RR = m_rstate.RR;
+  auto& R0 = m_rstate.R0;
+  auto& R1 = m_rstate.R1;
+  auto& R2 = m_rstate.R2;
+
+  auto ptr = data.data();
+  for (; ptr != block_end; ptr += block_size) {
+    // process_full_block(ptr);
+    ROUND2(S, ptr, RR, R0, R1, R2);
+  }
+
+  // process_full_block(m_buf.data());
+  ROUND2(S, m_buf.data(), RR, R0, R1, R2);
+
+  // Four final rounds to absorb message state
+  // static constexpr std::array<const std::uint8_t, block_size> zero_block{};
+  // for (int i = 0; i < 4; ++i) {
+  // process_full_block(zero_block.data());
+  const auto Z0 = STATE_0;
+  const auto Z1 = STATE_0;
+  const auto Z2 = STATE_0;
+  const auto Z3 = STATE_0;
+  ROUND(S, Z0, Z1, Z2, Z3, RR, R0, R1, R2);
+  ROUND(S, Z0, Z1, Z2, Z3, RR, R0, R1, R2);
+  ROUND(S, Z0, Z1, Z2, Z3, RR, R0, R1, R2);
+  ROUND(S, Z0, Z1, Z2, Z3, RR, R0, R1, R2);
+  // }
+
+  // if (nonce.size() != 16) {
+  //   throw std::runtime_error("wrong size of nonce");
+  // }
+
+  const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
+
+  __m128i T = N ^ AES(m_context.keys[0], N);
+  T ^= AES_modified(m_context.subkeys, S.S[0]);
+  T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
+  T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
+  T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
+  T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
+  T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
+  T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
+  T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
+  T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
+
+  const auto tag = AES(m_context.keys[1], T);
+  _mm_storeu_si128((__m128i*)target.data(), tag);
 }

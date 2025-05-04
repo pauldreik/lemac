@@ -21,7 +21,7 @@ void lemac_init(context* ctx, const uint8_t k[]);
 void lemac_MAC(context* ctx, const uint8_t* nonce, const uint8_t* m,
                size_t mlen, uint8_t* tag);
 
-class LeMac {
+class LeMac final {
 public:
   static constexpr std::size_t key_size = 16;
   explicit LeMac(std::span<const std::uint8_t, key_size> key = std::span{
@@ -35,12 +35,17 @@ public:
   void finalize_to(std::span<const std::uint8_t> nonce,
                    std::span<std::uint8_t, 16> target);
 
+  void update_and_finalize_to(std::span<const std::uint8_t> data,
+                              std::span<const std::uint8_t> nonce,
+                              std::span<std::uint8_t, 16> target) noexcept;
+
   static constexpr std::array<const std::uint8_t, key_size> zero_key{};
 
 private:
   void init(std::span<const std::uint8_t, key_size> key);
   static constexpr std::size_t block_size = 64;
-  void process_full_block(std::span<const std::uint8_t, block_size> data);
+  inline void process_full_block(const std::uint8_t* ptr) noexcept
+      __attribute__((always_inline));
 
   struct Rstate {
     __m128i RR;

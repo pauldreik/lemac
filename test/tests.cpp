@@ -253,9 +253,10 @@ TEST_CASE("benchmark 65 byte", "[.][benchmark]") {
   };
   BENCHMARK("C++ implementation") {
     LeMac lemac(std::span(K, 16));
-    lemac.update(std::span(M));
-    const auto tmp = lemac.finalize(std::span(N));
-    M[0] = tmp[0];
-    return tmp[0];
+    // lemac.update(std::span(M));
+    // lemac.finalize_to(std::span(N), T);
+    lemac.update_and_finalize_to(std::span(M), std::span(N), T);
+    M[0] = T[0];
+    return T[0];
   };
 }
