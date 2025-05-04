@@ -216,15 +216,40 @@ void lemac_MAC(context* ctx, const uint8_t* nonce, const uint8_t* m,
   *(__m128i*)tag = AES(ctx->keys[1], T);
 }
 
-LeMac::LeMac(std::span<const uint8_t, 16> key) {
-  lemac_init(&m_context, key.data());
-}
+LeMac::LeMac(std::span<const uint8_t, key_size> key) { init(key); }
 
 LeMac::LeMac(std::span<const std::uint8_t> key) {
-  if (key.size() != 16) {
+  if (key.size() != key_size) {
     throw std::runtime_error("wrong size of key");
   }
+  init(key.first<key_size>());
+}
+
+void LeMac::init(std::span<const uint8_t, key_size> key) {
   lemac_init(&m_context, key.data());
+  m_state = m_context.init;
+  auto& RR = m_rstate.RR;
+  auto& R0 = m_rstate.R0;
+  auto& R1 = m_rstate.R1;
+  auto& R2 = m_rstate.R2;
+  RR = STATE_0;
+  R0 = STATE_0;
+  R1 = STATE_0;
+  R2 = STATE_0;
+}
+
+void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
+  auto& S = m_state;
+
+  auto& RR = m_rstate.RR;
+  auto& R0 = m_rstate.R0;
+  auto& R1 = m_rstate.R1;
+  auto& R2 = m_rstate.R2;
+  const auto* ptr = data.data();
+  ROUND(S, _mm_loadu_si128((const __m128i*)(ptr + 0)),
+        _mm_loadu_si128((const __m128i*)(ptr + 16)),
+        _mm_loadu_si128((const __m128i*)(ptr + 32)),
+        _mm_loadu_si128((const __m128i*)(ptr + 48)), RR, R0, R1, R2);
 }
 
 void LeMac::update(std::span<const uint8_t> data) {
@@ -237,23 +262,9 @@ void LeMac::update(std::span<const uint8_t> data) {
   const auto whole_blocks = data.size() / block_size;
   const auto block_end = data.data() + whole_blocks * block_size;
 
-  m_state = m_context.init;
-  auto& S = m_state;
-
-  auto& RR = m_rstate.RR;
-  auto& R0 = m_rstate.R0;
-  auto& R1 = m_rstate.R1;
-  auto& R2 = m_rstate.R2;
-  RR = STATE_0;
-  R0 = STATE_0;
-  R1 = STATE_0;
-  R2 = STATE_0;
   auto ptr = data.data();
   for (; ptr != block_end; ptr += block_size) {
-    ROUND(S, _mm_loadu_si128((const __m128i*)(ptr + 0)),
-          _mm_loadu_si128((const __m128i*)(ptr + 16)),
-          _mm_loadu_si128((const __m128i*)(ptr + 32)),
-          _mm_loadu_si128((const __m128i*)(ptr + 48)), RR, R0, R1, R2);
+    process_full_block(std::span<const uint8_t, block_size>(ptr, block_size));
   }
 
   // write the tail into m_buf
@@ -273,17 +284,14 @@ std::array<uint8_t, 16> LeMac::finalize(std::span<const std::uint8_t> nonce) {
   auto& R0 = m_rstate.R0;
   auto& R1 = m_rstate.R1;
   auto& R2 = m_rstate.R2;
-  // Last round (padding)
-  ROUND(S, _mm_loadu_si128((const __m128i*)(ptr + 0)),
-        _mm_loadu_si128((const __m128i*)(ptr + 16)),
-        _mm_loadu_si128((const __m128i*)(ptr + 32)),
-        _mm_loadu_si128((const __m128i*)(ptr + 48)), RR, R0, R1, R2);
+
+  process_full_block(m_buf);
 
   // Four final rounds to absorb message state
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
+  static constexpr std::array<const std::uint8_t, block_size> zero_block{};
+  for (int i = 0; i < 4; ++i) {
+    process_full_block(zero_block);
+  }
 
   if (nonce.size() != 16) {
     throw std::runtime_error("wrong size of nonce");

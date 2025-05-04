@@ -36,7 +36,9 @@ public:
   static constexpr std::array<const std::uint8_t, key_size> zero_key{};
 
 private:
+  void init(std::span<const std::uint8_t, key_size> key);
   static constexpr std::size_t block_size = 64;
+  void process_full_block(std::span<const std::uint8_t, block_size> data);
 
   struct Rstate {
     __m128i RR;
