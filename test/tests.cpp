@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <lemac.h>
 
@@ -155,6 +156,33 @@ TEST_CASE("alternate api - iota nonces,key,input") {
 
   LeMac lm(std::span(K, 16));
   lm.update(std::span(M, MSIZE));
+  const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
+  const auto actual = tohex(lm.finalize(std::span(N, 16)));
+  REQUIRE(expected == actual);
+}
+
+TEST_CASE("partial updates") {
+  constexpr auto MSIZE = 65;
+
+  uint8_t M[MSIZE] = {};
+  uint8_t N[16] = {};
+  uint8_t K[16] = {};
+  uint8_t T[16] = {};
+
+  std::iota(std::begin(M), std::end(M), 0);
+  std::iota(std::begin(N), std::end(N), 0);
+  std::iota(std::begin(K), std::end(K), 0);
+
+  LeMac lm(std::span(K, 16));
+
+  auto inputdata = std::span(M, MSIZE);
+  const auto bytes_at_a_time = GENERATE(1uz, 2uz, 64uz, 65uz, 128uz);
+  while (!inputdata.empty()) {
+    const auto consumed = std::min(bytes_at_a_time, inputdata.size());
+    lm.update(inputdata.first(consumed));
+    inputdata = inputdata.subspan(consumed);
+  }
+
   const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
   const auto actual = tohex(lm.finalize(std::span(N, 16)));
   REQUIRE(expected == actual);

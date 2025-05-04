@@ -21,6 +21,7 @@ along with this software. If not, see
  - Assumes that endianness matches the hardware
  */
 
+#include <cassert>
 #include <cstring>
 #include <immintrin.h>
 #include <stdexcept>
@@ -256,7 +257,20 @@ void LeMac::update(std::span<const uint8_t> data) {
   if (m_bufsize != 0) {
     // fill the remainder of m_buf from data and process a whole block if
     // possible
-    throw std::runtime_error("implement me");
+    assert(m_bufsize < block_size);
+    const auto remaining_to_full_block = block_size - m_bufsize;
+    if (data.size() < remaining_to_full_block) {
+      // not enough data for a full block, append to the buffer and hope for
+      // better luck next time
+      std::memcpy(&m_buf[m_bufsize], data.data(), data.size());
+      m_bufsize += data.size();
+      return;
+    }
+    // process the entire block
+    std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
+    process_full_block(m_buf);
+    m_bufsize = 0;
+    data = data.subspan(remaining_to_full_block);
   }
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;
