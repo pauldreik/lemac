@@ -118,9 +118,9 @@ __m128i AES_modified(const __m128i* Ki, __m128i x) {
 }
 
 void lemac_init(context* ctx, const uint8_t k[]) {
-  const __m128i* K = (__m128i*)k;
+  const auto K = _mm_loadu_si128((const __m128i*)k);
   __m128i Ki[11];
-  AES_KS(*K, Ki);
+  AES_KS(K, Ki);
 
   // Kinit 0 --> 8
   for (unsigned i = 0; i < tabsize(ctx->init.S); i++)

@@ -209,14 +209,15 @@ TEST_CASE("unaligned access") {
 
   auto N_ = unaligned_buf(1, 16);
   auto N = N_.get();
-  uint8_t K[16] = {};
+  auto K_ = unaligned_buf(1, 16);
+  auto K = K_.get();
   uint8_t T[16] = {};
 
   std::iota(std::begin(inputdata), std::end(inputdata), 0);
   std::iota(std::begin(N), std::end(N), 0);
   std::iota(std::begin(K), std::end(K), 0);
 
-  LeMac lm(std::span(K, 16));
+  LeMac lm(K);
 
   const auto bytes_at_a_time = GENERATE(1uz, 2uz, 64uz, 65uz, 128uz);
   while (!inputdata.empty()) {
