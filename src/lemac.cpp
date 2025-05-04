@@ -311,9 +311,9 @@ std::array<uint8_t, 16> LeMac::finalize(std::span<const std::uint8_t> nonce) {
     throw std::runtime_error("wrong size of nonce");
   }
 
-  const __m128i* N = (const __m128i*)nonce.data();
+  const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  __m128i T = *N ^ AES(m_context.keys[0], *N);
+  __m128i T = N ^ AES(m_context.keys[0], N);
   T ^= AES_modified(m_context.subkeys, S.S[0]);
   T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
   T ^= AES_modified(m_context.subkeys + 2, S.S[2]);

@@ -187,3 +187,45 @@ TEST_CASE("partial updates") {
   const auto actual = tohex(lm.finalize(std::span(N, 16)));
   REQUIRE(expected == actual);
 }
+
+namespace {
+class unaligned_buf {
+public:
+  unaligned_buf(std::size_t misalignment, std::size_t size)
+      : m_misalignment(misalignment), m_storage(misalignment + size) {}
+  auto get() { return std::span(m_storage).subspan(m_misalignment); }
+
+private:
+  std::size_t m_misalignment;
+  std::vector<std::uint8_t> m_storage;
+};
+} // namespace
+
+TEST_CASE("unaligned access") {
+  constexpr auto MSIZE = 65;
+
+  auto M = unaligned_buf(1, MSIZE);
+  auto inputdata = M.get();
+
+  auto N_ = unaligned_buf(1, 16);
+  auto N = N_.get();
+  uint8_t K[16] = {};
+  uint8_t T[16] = {};
+
+  std::iota(std::begin(inputdata), std::end(inputdata), 0);
+  std::iota(std::begin(N), std::end(N), 0);
+  std::iota(std::begin(K), std::end(K), 0);
+
+  LeMac lm(std::span(K, 16));
+
+  const auto bytes_at_a_time = GENERATE(1uz, 2uz, 64uz, 65uz, 128uz);
+  while (!inputdata.empty()) {
+    const auto consumed = std::min(bytes_at_a_time, inputdata.size());
+    lm.update(inputdata.first(consumed));
+    inputdata = inputdata.subspan(consumed);
+  }
+
+  const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
+  const auto actual = tohex(lm.finalize(N));
+  REQUIRE(expected == actual);
+}
