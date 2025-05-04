@@ -71,6 +71,17 @@ TEST_CASE("recreate test vector with zero nonce, key and empty input") {
   REQUIRE(expected == lemac);
 }
 
+TEST_CASE("alternate api - empty input") {
+  LeMac lm;
+  constexpr auto MSIZE = 0;
+
+  uint8_t M[MSIZE] = {};
+  lm.update(std::span(M, MSIZE));
+  const std::string expected = "52282e853c9cfeb5537d33fb916a341f";
+  const auto actual = tohex(lm.finalize());
+  REQUIRE(expected == actual);
+}
+
 TEST_CASE("recreate test vector with zero nonce, key and 16 zeros as input") {
   constexpr auto MSIZE = 16;
 
@@ -91,6 +102,17 @@ TEST_CASE("recreate test vector with zero nonce, key and 16 zeros as input") {
   std::cout << "LeMac=" << lemac << '\n';
   const std::string expected = "26fa471b77facc73ec2f9b50bb1af864";
   REQUIRE(expected == lemac);
+}
+
+TEST_CASE("alternate api - 16 zeros input") {
+  LeMac lm;
+  constexpr auto MSIZE = 16;
+
+  uint8_t M[MSIZE] = {};
+  lm.update(std::span(M, MSIZE));
+  const std::string expected = "26fa471b77facc73ec2f9b50bb1af864";
+  const auto actual = tohex(lm.finalize());
+  REQUIRE(expected == actual);
 }
 
 TEST_CASE("recreate test vector with iota nonce, key and input") {
@@ -117,4 +139,23 @@ TEST_CASE("recreate test vector with iota nonce, key and input") {
   std::cout << "LeMac=" << lemac << '\n';
   const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
   REQUIRE(expected == lemac);
+}
+
+TEST_CASE("alternate api - iota nonces,key,input") {
+  constexpr auto MSIZE = 65;
+
+  uint8_t M[MSIZE] = {};
+  uint8_t N[16] = {};
+  uint8_t K[16] = {};
+  uint8_t T[16] = {};
+
+  std::iota(std::begin(M), std::end(M), 0);
+  std::iota(std::begin(N), std::end(N), 0);
+  std::iota(std::begin(K), std::end(K), 0);
+
+  LeMac lm(std::span(K, 16));
+  lm.update(std::span(M, MSIZE));
+  const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
+  const auto actual = tohex(lm.finalize(std::span(N, 16)));
+  REQUIRE(expected == actual);
 }

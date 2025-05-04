@@ -21,7 +21,9 @@ along with this software. If not, see
  - Assumes that endianness matches the hardware
  */
 
+#include <cstring>
 #include <immintrin.h>
+#include <stdexcept>
 #include <stdint.h>
 #include <string.h>
 #include <wmmintrin.h>
@@ -212,4 +214,96 @@ void lemac_MAC(context* ctx, const uint8_t* nonce, const uint8_t* m,
   T ^= AES_modified(ctx->subkeys + 8, S.S[8]);
 
   *(__m128i*)tag = AES(ctx->keys[1], T);
+}
+
+LeMac::LeMac(std::span<const uint8_t, 16> key) {
+  lemac_init(&m_context, key.data());
+}
+
+LeMac::LeMac(std::span<const std::uint8_t> key) {
+  if (key.size() != 16) {
+    throw std::runtime_error("wrong size of key");
+  }
+  lemac_init(&m_context, key.data());
+}
+
+void LeMac::update(std::span<const uint8_t> data) {
+  if (m_bufsize != 0) {
+    // fill the remainder of m_buf from data and process a whole block if
+    // possible
+    throw std::runtime_error("implement me");
+  }
+  // process whole blocks
+  const auto whole_blocks = data.size() / block_size;
+  const auto block_end = data.data() + whole_blocks * block_size;
+
+  m_state = m_context.init;
+  auto& S = m_state;
+
+  auto& RR = m_rstate.RR;
+  auto& R0 = m_rstate.R0;
+  auto& R1 = m_rstate.R1;
+  auto& R2 = m_rstate.R2;
+  RR = STATE_0;
+  R0 = STATE_0;
+  R1 = STATE_0;
+  R2 = STATE_0;
+  auto ptr = data.data();
+  for (; ptr != block_end; ptr += block_size) {
+    ROUND(S, _mm_loadu_si128((const __m128i*)(ptr + 0)),
+          _mm_loadu_si128((const __m128i*)(ptr + 16)),
+          _mm_loadu_si128((const __m128i*)(ptr + 32)),
+          _mm_loadu_si128((const __m128i*)(ptr + 48)), RR, R0, R1, R2);
+  }
+
+  // write the tail into m_buf
+  m_bufsize = data.size() - whole_blocks * block_size;
+  std::memcpy(m_buf.data(), ptr, m_bufsize);
+}
+
+std::array<uint8_t, 16> LeMac::finalize(std::span<const std::uint8_t> nonce) {
+  // let m_buf be padded
+  m_buf.at(m_bufsize) = 1;
+  for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
+    m_buf.at(i) = 0;
+  }
+  const auto* ptr = m_buf.data();
+  auto& S = m_state;
+  auto& RR = m_rstate.RR;
+  auto& R0 = m_rstate.R0;
+  auto& R1 = m_rstate.R1;
+  auto& R2 = m_rstate.R2;
+  // Last round (padding)
+  ROUND(S, _mm_loadu_si128((const __m128i*)(ptr + 0)),
+        _mm_loadu_si128((const __m128i*)(ptr + 16)),
+        _mm_loadu_si128((const __m128i*)(ptr + 32)),
+        _mm_loadu_si128((const __m128i*)(ptr + 48)), RR, R0, R1, R2);
+
+  // Four final rounds to absorb message state
+  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
+  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
+  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
+  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
+
+  if (nonce.size() != 16) {
+    throw std::runtime_error("wrong size of nonce");
+  }
+
+  const __m128i* N = (const __m128i*)nonce.data();
+
+  __m128i T = *N ^ AES(m_context.keys[0], *N);
+  T ^= AES_modified(m_context.subkeys, S.S[0]);
+  T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
+  T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
+  T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
+  T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
+  T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
+  T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
+  T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
+  T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
+
+  std::array<uint8_t, 16> ret;
+  const auto tag = AES(m_context.keys[1], T);
+  _mm_store_si128((__m128i*)ret.data(), tag);
+  return ret;
 }
