@@ -253,10 +253,24 @@ void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
   auto& R1 = m_rstate.R1;
   auto& R2 = m_rstate.R2;
   const auto* ptr = data.data();
-  ROUND(S, _mm_loadu_si128((const __m128i*)(ptr + 0)),
-        _mm_loadu_si128((const __m128i*)(ptr + 16)),
-        _mm_loadu_si128((const __m128i*)(ptr + 32)),
-        _mm_loadu_si128((const __m128i*)(ptr + 48)), RR, R0, R1, R2);
+  const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
+  const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
+  const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
+  const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
+  __m128i T = S.S[8];
+  S.S[8] = _mm_aesenc_si128(S.S[7], M3);
+  S.S[7] = _mm_aesenc_si128(S.S[6], M1);
+  S.S[6] = _mm_aesenc_si128(S.S[5], M1);
+  S.S[5] = _mm_aesenc_si128(S.S[4], M0);
+  S.S[4] = _mm_aesenc_si128(S.S[3], M0);
+  S.S[3] = _mm_aesenc_si128(S.S[2], R1 ^ R2);
+  S.S[2] = _mm_aesenc_si128(S.S[1], M3);
+  S.S[1] = _mm_aesenc_si128(S.S[0], M3);
+  S.S[0] = S.S[0] ^ T ^ M2;
+  R2 = R1;
+  R1 = R0;
+  R0 = RR ^ M1;
+  RR = M2;
 }
 
 void LeMac::update(std::span<const uint8_t> data) {
