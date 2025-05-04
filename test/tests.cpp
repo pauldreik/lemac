@@ -54,7 +54,7 @@ std::string tohex(std::span<const std::uint8_t> binary) {
 TEST_CASE("recreate test vector with zero nonce, key and empty input") {
   constexpr auto MSIZE = 0;
 
-  uint8_t M[MSIZE] = {};
+  uint8_t* M = {};
   uint8_t N[16] = {};
   uint8_t K[16] = {};
   uint8_t T[16] = {};
@@ -77,7 +77,7 @@ TEST_CASE("alternate api - empty input") {
   LeMac lm;
   constexpr auto MSIZE = 0;
 
-  uint8_t M[MSIZE] = {};
+  uint8_t* M = {};
   lm.update(std::span(M, MSIZE));
   const std::string expected = "52282e853c9cfeb5537d33fb916a341f";
   const auto actual = tohex(lm.finalize());
@@ -149,7 +149,6 @@ TEST_CASE("alternate api - iota nonces,key,input") {
   uint8_t M[MSIZE] = {};
   uint8_t N[16] = {};
   uint8_t K[16] = {};
-  uint8_t T[16] = {};
 
   std::iota(std::begin(M), std::end(M), 0);
   std::iota(std::begin(N), std::end(N), 0);
@@ -168,7 +167,6 @@ TEST_CASE("partial updates") {
   uint8_t M[MSIZE] = {};
   uint8_t N[16] = {};
   uint8_t K[16] = {};
-  uint8_t T[16] = {};
 
   std::iota(std::begin(M), std::end(M), 0);
   std::iota(std::begin(N), std::end(N), 0);
@@ -244,18 +242,18 @@ TEST_CASE("benchmark 65 byte", "[.][benchmark]") {
   std::iota(std::begin(M), std::end(M), 0);
   std::iota(std::begin(N), std::end(N), 0);
   std::iota(std::begin(K), std::end(K), 0);
-  BENCHMARK("original implementation") {
-    context ctx;
-    lemac_init(&ctx, K);
-    lemac_MAC(&ctx, N, M, MSIZE, T);
-    M[0] = T[0];
-    return T[0];
-  };
   BENCHMARK("C++ implementation") {
     LeMac lemac(std::span(K, 16));
     lemac.update(std::span(M));
     const auto tmp = lemac.finalize(std::span(N));
     M[0] = tmp[0];
     return tmp[0];
+  };
+  BENCHMARK("original implementation") {
+    context ctx;
+    lemac_init(&ctx, K);
+    lemac_MAC(&ctx, N, M, MSIZE, T);
+    M[0] = T[0];
+    return T[0];
   };
 }

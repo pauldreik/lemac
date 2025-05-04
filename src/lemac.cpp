@@ -300,12 +300,6 @@ void LeMac::finalize_to(std::span<const uint8_t> nonce,
   for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
     m_buf.at(i) = 0;
   }
-  const auto* ptr = m_buf.data();
-  auto& S = m_state;
-  auto& RR = m_rstate.RR;
-  auto& R0 = m_rstate.R0;
-  auto& R1 = m_rstate.R1;
-  auto& R2 = m_rstate.R2;
 
   process_full_block(m_buf);
 
@@ -321,6 +315,7 @@ void LeMac::finalize_to(std::span<const uint8_t> nonce,
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
+  auto& S = m_state;
   __m128i T = N ^ AES(m_context.keys[0], N);
   T ^= AES_modified(m_context.subkeys, S.S[0]);
   T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
