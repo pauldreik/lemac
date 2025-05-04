@@ -227,8 +227,7 @@ LeMac::LeMac(std::span<const std::uint8_t> key) {
   init(key.first<key_size>());
 }
 
-void LeMac::init(std::span<const uint8_t, key_size> key) {
-  lemac_init(&m_context, key.data());
+void LeMac::reset() {
   m_state = m_context.init;
   auto& RR = m_rstate.RR;
   auto& R0 = m_rstate.R0;
@@ -238,6 +237,12 @@ void LeMac::init(std::span<const uint8_t, key_size> key) {
   R0 = STATE_0;
   R1 = STATE_0;
   R2 = STATE_0;
+  m_bufsize = 0;
+}
+
+void LeMac::init(std::span<const uint8_t, key_size> key) {
+  lemac_init(&m_context, key.data());
+  reset();
 }
 
 void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {

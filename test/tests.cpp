@@ -117,6 +117,17 @@ TEST_CASE("alternate api - 16 zeros input") {
   REQUIRE(expected == actual);
 }
 
+TEST_CASE("the hasher can be reset") {
+  const std::vector<std::uint8_t> data{0x20, 0x42};
+  LeMac lemac;
+  lemac.update(data);
+  const auto first_round = lemac.finalize();
+  lemac.reset();
+  lemac.update(data);
+  const auto second_round = lemac.finalize();
+  REQUIRE(first_round == second_round);
+}
+
 TEST_CASE("recreate test vector with iota nonce, key and input") {
   constexpr auto MSIZE = 65;
 
@@ -232,7 +243,7 @@ TEST_CASE("unaligned access") {
 }
 
 TEST_CASE("benchmark 65 byte", "[.][benchmark]") {
-  constexpr auto MSIZE = 65;
+  constexpr auto MSIZE = 1024;
 
   uint8_t M[MSIZE] = {};
   uint8_t N[16] = {};
@@ -249,9 +260,24 @@ TEST_CASE("benchmark 65 byte", "[.][benchmark]") {
     M[0] = tmp[0];
     return tmp[0];
   };
+  LeMac lemac(std::span(K, 16));
+  BENCHMARK("C++ implementation without init") {
+    lemac.reset();
+    lemac.update(std::span(M));
+    const auto tmp = lemac.finalize(std::span(N));
+    M[0] = tmp[0];
+    return tmp[0];
+  };
   BENCHMARK("original implementation") {
     context ctx;
     lemac_init(&ctx, K);
+    lemac_MAC(&ctx, N, M, MSIZE, T);
+    M[0] = T[0];
+    return T[0];
+  };
+  context ctx;
+  lemac_init(&ctx, K);
+  BENCHMARK("original implementation without init") {
     lemac_MAC(&ctx, N, M, MSIZE, T);
     M[0] = T[0];
     return T[0];

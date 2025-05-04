@@ -35,6 +35,8 @@ public:
   void finalize_to(std::span<const std::uint8_t> nonce,
                    std::span<std::uint8_t, 16> target);
 
+  void reset();
+
   static constexpr std::array<const std::uint8_t, key_size> zero_key{};
 
 private:
