@@ -9,6 +9,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-fsanitize=address,undefined)
 add_link_options(-fsanitize=address,undefined)
 
+add_compile_options(-Wall -Wextra -pedantic)
+
 add_library(lemac
     src/lemac.cpp
     src/lemac.h)
