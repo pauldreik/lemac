@@ -160,6 +160,7 @@ void lemac_init(context* ctx, const uint8_t k[]) {
   } while (0);
 
 state lemac_AU(context* ctx, const uint8_t* m, size_t mlen) {
+  assert(m);
   /* state S = ctx->init; */
   // Padding
   size_t m_padded_len = mlen - (mlen % 64) + 64;

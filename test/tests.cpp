@@ -54,7 +54,7 @@ std::string tohex(std::span<const std::uint8_t> binary) {
 TEST_CASE("recreate test vector with zero nonce, key and empty input") {
   constexpr auto MSIZE = 0;
 
-  uint8_t* M = {};
+  uint8_t M[1] = {};
   uint8_t N[16] = {};
   uint8_t K[16] = {};
   uint8_t T[16] = {};
@@ -77,7 +77,7 @@ TEST_CASE("alternate api - empty input") {
   LeMac lm;
   constexpr auto MSIZE = 0;
 
-  uint8_t* M = {};
+  uint8_t M[1] = {};
   lm.update(std::span(M, MSIZE));
   const std::string expected = "52282e853c9cfeb5537d33fb916a341f";
   const auto actual = tohex(lm.finalize());
