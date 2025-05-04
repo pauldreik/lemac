@@ -287,6 +287,14 @@ void LeMac::update(std::span<const uint8_t> data) {
 }
 
 std::array<uint8_t, 16> LeMac::finalize(std::span<const std::uint8_t> nonce) {
+  std::array<uint8_t, 16> ret;
+  finalize_to(nonce, ret);
+  return ret;
+}
+
+void LeMac::finalize_to(std::span<const uint8_t> nonce,
+                        std::span<uint8_t, 16> target) {
+
   // let m_buf be padded
   m_buf.at(m_bufsize) = 1;
   for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
@@ -324,8 +332,6 @@ std::array<uint8_t, 16> LeMac::finalize(std::span<const std::uint8_t> nonce) {
   T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
   T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
 
-  std::array<uint8_t, 16> ret;
   const auto tag = AES(m_context.keys[1], T);
-  _mm_store_si128((__m128i*)ret.data(), tag);
-  return ret;
+  _mm_store_si128((__m128i*)target.data(), tag);
 }
