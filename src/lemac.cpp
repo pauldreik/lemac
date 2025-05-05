@@ -345,5 +345,5 @@ void LeMac::finalize_to(std::span<const uint8_t> nonce,
   T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
 
   const auto tag = AES(m_context.keys[1], T);
-  _mm_store_si128((__m128i*)target.data(), tag);
+  _mm_storeu_si128((__m128i*)target.data(), tag);
 }
