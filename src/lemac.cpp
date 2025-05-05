@@ -229,10 +229,7 @@ LeMac::LeMac(std::span<const std::uint8_t> key) {
 
 void LeMac::reset() {
   m_state.s = m_context.init;
-  m_state.r.RR = STATE_0;
-  m_state.r.R0 = STATE_0;
-  m_state.r.R1 = STATE_0;
-  m_state.r.R2 = STATE_0;
+  m_state.r.reset();
   m_bufsize = 0;
 }
 
@@ -268,6 +265,24 @@ void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
   R.R0 = R.RR ^ M1;
   R.RR = M2;
 }
+void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) {
+  const __m128i M = STATE_0;
+  __m128i T = S.S[8];
+  S.S[8] = _mm_aesenc_si128(S.S[7], M);
+  S.S[7] = _mm_aesenc_si128(S.S[6], M);
+  S.S[6] = _mm_aesenc_si128(S.S[5], M);
+  S.S[5] = _mm_aesenc_si128(S.S[4], M);
+
+  S.S[4] = _mm_aesenc_si128(S.S[3], M);
+  S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+  S.S[2] = _mm_aesenc_si128(S.S[1], M);
+  S.S[1] = _mm_aesenc_si128(S.S[0], M);
+  S.S[0] = S.S[0] ^ T /*^ M2*/;
+  R.R2 = R.R1;
+  R.R1 = R.R0;
+  R.R0 = R.RR /*^ M1*/;
+  R.RR = M;
+}
 } // namespace
 
 void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
@@ -296,11 +311,13 @@ void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
 }
 
 void LeMac::update(std::span<const uint8_t> data) {
+  bool process_entire_m_buf = false;
+  std::size_t remaining_to_full_block;
   if (m_bufsize != 0) {
     // fill the remainder of m_buf from data and process a whole block if
     // possible
     assert(m_bufsize < block_size);
-    const auto remaining_to_full_block = block_size - m_bufsize;
+    remaining_to_full_block = block_size - m_bufsize;
     if (data.size() < remaining_to_full_block) {
       // not enough data for a full block, append to the buffer and hope for
       // better luck next time
@@ -308,21 +325,25 @@ void LeMac::update(std::span<const uint8_t> data) {
       m_bufsize += data.size();
       return;
     }
+    process_entire_m_buf = true;
+  }
+
+  auto state = m_state;
+
+  if (process_entire_m_buf) {
     // process the entire block
     std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
-    process_full_block(m_buf);
+    process_block(state.s, state.r, m_buf.data());
     m_bufsize = 0;
     data = data.subspan(remaining_to_full_block);
   }
+
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;
   const auto block_end = data.data() + whole_blocks * block_size;
 
   auto ptr = data.data();
-  auto state = m_state;
   for (; ptr != block_end; ptr += block_size) {
-    // process_full_block(std::span<const uint8_t, block_size>(ptr,
-    // block_size));
     process_block(state.s, state.r, ptr);
   }
   m_state = state;
@@ -348,17 +369,18 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
     m_buf[i] = 0;
   }
 
-  process_full_block(m_buf);
+  process_block(m_state.s, m_state.r, m_buf.data());
 
   // Four final rounds to absorb message state
-  static constexpr std::array<const std::uint8_t, block_size> zero_block{};
-  for (int i = 0; i < 4; ++i) {
-    process_full_block(zero_block);
-  }
+  process_zero_block(m_state.s, m_state.r);
+  process_zero_block(m_state.s, m_state.r);
+  process_zero_block(m_state.s, m_state.r);
+  process_zero_block(m_state.s, m_state.r);
 
-  if (nonce.size() != 16) {
-    throw std::runtime_error("wrong size of nonce");
-  }
+  assert(nonce.size() == 16);
+  // if (nonce.size() != 16) {
+  //   throw std::runtime_error("wrong size of nonce");
+  // }
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
@@ -377,3 +399,5 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
   const auto tag = AES(m_context.keys[1], T);
   _mm_storeu_si128((__m128i*)target.data(), tag);
 }
+
+void LeMac::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }

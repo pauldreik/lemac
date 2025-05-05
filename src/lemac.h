@@ -44,6 +44,7 @@ public:
     __m128i S[9];
   };
   struct Rstate {
+    void reset();
     __m128i RR;
     __m128i R0;
     __m128i R1;
