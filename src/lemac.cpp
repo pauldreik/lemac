@@ -303,14 +303,15 @@ void LeMac::update(std::span<const uint8_t> data) {
   std::memcpy(m_buf.data(), ptr, m_bufsize);
 }
 
-std::array<uint8_t, 16> LeMac::finalize(std::span<const std::uint8_t> nonce) {
-  std::array<uint8_t, 16> ret;
+std::array<std::uint8_t, 16>
+LeMac::finalize(std::span<const std::uint8_t> nonce) {
+  std::array<std::uint8_t, 16> ret;
   finalize_to(nonce, ret);
   return ret;
 }
 
-void LeMac::finalize_to(std::span<const uint8_t> nonce,
-                        std::span<uint8_t, 16> target) {
+void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
+                        std::span<std::uint8_t, 16> target) {
 
   // let m_buf be padded
   m_buf.at(m_bufsize) = 1;
