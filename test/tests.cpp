@@ -244,7 +244,7 @@ TEST_CASE("unaligned access") {
 
 TEST_CASE("benchmark 256 kByte", "[.][benchmark]") {
   constexpr auto MSIZE = 256 * 1024;
-  // 40 µs * ~4 GHz / 256 kB = 0.625 cycles/byte on zen 4(claimed in paper on
+  // 5 µs * ~4 GHz / 256 kB = 0.078 cycles/byte on zen 4(claimed in paper on
   // zen3: 0.072)
   uint8_t M[MSIZE] = {};
   uint8_t N[16] = {};
