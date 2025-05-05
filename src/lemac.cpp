@@ -345,7 +345,7 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
   // let m_buf be padded
   m_buf.at(m_bufsize) = 1;
   for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
-    m_buf.at(i) = 0;
+    m_buf[i] = 0;
   }
 
   process_full_block(m_buf);
