@@ -14,7 +14,7 @@ add_compile_options(-Wall -Wextra -pedantic)
 add_library(lemac
     src/lemac.cpp
     src/lemac.h)
-target_compile_options(lemac PRIVATE -maes -msse2)
+target_compile_options(lemac PRIVATE -maes -mvaes -msse2 -mavx512f)
 
 target_include_directories(lemac PUBLIC src)
 
