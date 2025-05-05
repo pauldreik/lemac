@@ -242,8 +242,8 @@ TEST_CASE("unaligned access") {
   REQUIRE(expected == actual);
 }
 
-TEST_CASE("benchmark 256 kByte", "[.][benchmark]") {
-  constexpr auto MSIZE = 256 * 1024;
+namespace {
+template <std::size_t MSIZE> void benchmark() {
   // 5 µs * ~4 GHz / 256 kB = 0.078 cycles/byte on zen 4(claimed in paper on
   // zen3: 0.072)
   uint8_t M[MSIZE] = {};
@@ -254,33 +254,32 @@ TEST_CASE("benchmark 256 kByte", "[.][benchmark]") {
   std::iota(std::begin(M), std::end(M), 0);
   std::iota(std::begin(N), std::end(N), 0);
   std::iota(std::begin(K), std::end(K), 0);
-  BENCHMARK("C++ implementation") {
+
+  {
     LeMac lemac(std::span(K, 16));
-    lemac.update(std::span(M));
-    const auto tmp = lemac.finalize(std::span(N));
-    M[0] = tmp[0];
-    return tmp[0];
-  };
-  LeMac lemac(std::span(K, 16));
-  BENCHMARK("C++ implementation without init") {
-    lemac.reset();
-    lemac.update(std::span(M));
-    const auto tmp = lemac.finalize(std::span(N));
-    M[0] = tmp[0];
-    return tmp[0];
-  };
-  BENCHMARK("original implementation") {
+    BENCHMARK("C++ implementation without init") {
+      lemac.reset();
+      lemac.update(std::span(M));
+      const auto tmp = lemac.finalize(std::span(N));
+      M[0] = tmp[0];
+      return tmp[0];
+    };
+  }
+
+  {
     context ctx;
     lemac_init(&ctx, K);
-    lemac_MAC(&ctx, N, M, MSIZE, T);
-    M[0] = T[0];
-    return T[0];
-  };
-  context ctx;
-  lemac_init(&ctx, K);
-  BENCHMARK("original implementation without init") {
-    lemac_MAC(&ctx, N, M, MSIZE, T);
-    M[0] = T[0];
-    return T[0];
-  };
+    BENCHMARK("original implementation without init") {
+      lemac_MAC(&ctx, N, M, MSIZE, T);
+      M[0] = T[0];
+      return T[0];
+    };
+  }
 }
+} // namespace
+TEST_CASE("benchmark 1 byte", "[.][benchmark]") { benchmark<1>(); }
+TEST_CASE("benchmark 1 kByte", "[.][benchmark]") { benchmark<1 * 1024>(); }
+TEST_CASE("benchmark 4 kByte", "[.][benchmark]") { benchmark<4 * 1024>(); }
+TEST_CASE("benchmark 16 kByte", "[.][benchmark]") { benchmark<16 * 1024>(); }
+TEST_CASE("benchmark 64 kByte", "[.][benchmark]") { benchmark<64 * 1024>(); }
+TEST_CASE("benchmark 256 kByte", "[.][benchmark]") { benchmark<256 * 1024>(); }
