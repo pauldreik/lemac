@@ -245,6 +245,30 @@ void LeMac::init(std::span<const uint8_t, key_size> key) {
   reset();
 }
 
+namespace {
+void process_block(state& S, LeMac::Rstate& R, const std::uint8_t* ptr) {
+  const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
+  const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
+  const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
+  const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
+  __m128i T = S.S[8];
+  S.S[8] = _mm_aesenc_si128(S.S[7], M3);
+  S.S[7] = _mm_aesenc_si128(S.S[6], M1);
+  S.S[6] = _mm_aesenc_si128(S.S[5], M1);
+  S.S[5] = _mm_aesenc_si128(S.S[4], M0);
+
+  S.S[4] = _mm_aesenc_si128(S.S[3], M0);
+  S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+  S.S[2] = _mm_aesenc_si128(S.S[1], M3);
+  S.S[1] = _mm_aesenc_si128(S.S[0], M3);
+  S.S[0] = S.S[0] ^ T ^ M2;
+  R.R2 = R.R1;
+  R.R1 = R.R0;
+  R.R0 = R.RR ^ M1;
+  R.RR = M2;
+}
+} // namespace
+
 void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
   auto& S = m_state;
 
@@ -294,10 +318,15 @@ void LeMac::update(std::span<const uint8_t> data) {
   const auto block_end = data.data() + whole_blocks * block_size;
 
   auto ptr = data.data();
+  auto R = m_rstate;
+  auto S = m_state;
   for (; ptr != block_end; ptr += block_size) {
-    process_full_block(std::span<const uint8_t, block_size>(ptr, block_size));
+    // process_full_block(std::span<const uint8_t, block_size>(ptr,
+    // block_size));
+    process_block(S, R, ptr);
   }
-
+  m_rstate = R;
+  m_state = S;
   // write the tail into m_buf
   m_bufsize = data.size() - whole_blocks * block_size;
   std::memcpy(m_buf.data(), ptr, m_bufsize);

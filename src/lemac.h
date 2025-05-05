@@ -44,6 +44,7 @@ private:
   static constexpr std::size_t block_size = 64;
   void process_full_block(std::span<const std::uint8_t, block_size> data);
 
+public:
   struct Rstate {
     __m128i RR;
     __m128i R0;
