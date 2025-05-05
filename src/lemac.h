@@ -39,22 +39,38 @@ public:
 
   static constexpr std::array<const std::uint8_t, key_size> zero_key{};
 
-private:
-  void init(std::span<const std::uint8_t, key_size> key);
-  static constexpr std::size_t block_size = 64;
-  void process_full_block(std::span<const std::uint8_t, block_size> data);
-
-public:
+  struct Sstate {
+    static constexpr inline auto count = 9uz;
+    __m128i S[9];
+  };
   struct Rstate {
     __m128i RR;
     __m128i R0;
     __m128i R1;
     __m128i R2;
   };
+  // this is the state that changes during absorption of data
+  struct ComboState {
+    Sstate s;
+    Rstate r;
+  };
 
-  context m_context;
-  state m_state;
-  Rstate m_rstate;
+  // this is inited on lemac construction and not changed after
+  struct LeMacContext {
+    Sstate init;
+    __m128i keys[2][11];
+    __m128i subkeys[18];
+  };
+  static_assert(sizeof(LeMacContext) == 784);
+
+private:
+  void init(std::span<const std::uint8_t, key_size> key);
+  static constexpr std::size_t block_size = 64;
+  void process_full_block(std::span<const std::uint8_t, block_size> data);
+
+public:
+  LeMacContext m_context;
+  ComboState m_state;
   std::array<std::uint8_t, block_size> m_buf{};
   std::size_t m_bufsize{};
 };
