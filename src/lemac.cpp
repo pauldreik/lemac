@@ -245,80 +245,29 @@ void LeMac::init(std::span<const uint8_t, key_size> key) {
   reset();
 }
 
-namespace {
-__m512 m512_combine_m128x4(__m128 x4, __m128 x3, __m128 x2, __m128 x1) {
-  const __m256 h = _mm256_set_m128(x4, x3);
-  const __m256 l = _mm256_set_m128(x2, x1);
-  return _mm512_insertf32x8(_mm512_castps256_ps512(l), h, 1);
-}
-union FourBy16 {
-  __m128i by16[4];
-  __m512i by64;
-};
-} // namespace
-
 void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
+  auto& S = m_state;
+
   const auto* ptr = data.data();
-  // const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
-  // const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
-  // const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
-  // const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
-  FourBy16 M0123;
-  M0123.by64 = _mm512_loadu_si512(ptr);
+  const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
+  const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
+  const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
+  const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
+  __m128i T = S.S[8];
+  S.S[8] = _mm_aesenc_si128(S.S[7], M3);
+  S.S[7] = _mm_aesenc_si128(S.S[6], M1);
+  S.S[6] = _mm_aesenc_si128(S.S[5], M1);
+  S.S[5] = _mm_aesenc_si128(S.S[4], M0);
 
-  FourBy16 M3110;
-  M3110.by16[0] = M0123.by16[3];
-  M3110.by16[1] = M0123.by16[1];
-  M3110.by16[2] = M0123.by16[1];
-  M3110.by16[3] = M0123.by16[0];
-
-  FourBy16 keys;
-  keys.by16[0] = m_state.S[7];
-  keys.by16[1] = m_state.S[6];
-  keys.by16[2] = m_state.S[5];
-  keys.by16[3] = m_state.S[4];
-  const __m128i T = m_state.S[8];
-  // m_state.S[8] = _mm_aesenc_si128(m_state.S[7], M0123.by16[3]);
-  // m_state.S[7] = _mm_aesenc_si128(m_state.S[6], M0123.by16[1]);
-  // m_state.S[6] = _mm_aesenc_si128(m_state.S[5], M0123.by16[1]);
-  // m_state.S[5] = _mm_aesenc_si128(m_state.S[4], M0123.by16[0]);
-  {
-    FourBy16 tmp;
-    tmp.by64 = _mm512_aesenc_epi128(keys.by64, M3110.by64);
-    m_state.S[8] = tmp.by16[0];
-    m_state.S[7] = tmp.by16[1];
-    m_state.S[6] = tmp.by16[2];
-    m_state.S[5] = tmp.by16[3];
-  }
-
-  {
-    FourBy16 keys2;
-    keys2.by16[0] = m_state.S[3];
-    keys2.by16[1] = m_state.S[2];
-    keys2.by16[2] = m_state.S[1];
-    keys2.by16[3] = m_state.S[0];
-    FourBy16 input;
-    input.by16[0] = M0123.by16[0];
-    input.by16[1] = m_rstate.R1 ^ m_rstate.R2;
-    input.by16[2] = M0123.by16[3];
-    input.by16[3] = M0123.by16[3];
-    FourBy16 tmp;
-    tmp.by64 = _mm512_aesenc_epi128(keys2.by64, input.by64);
-    // m_state.S[4] = _mm_aesenc_si128(m_state.S[3], M0123.by16[0]);
-    // m_state.S[3] = _mm_aesenc_si128(m_state.S[2], m_rstate.R1 ^ m_rstate.R2);
-    // m_state.S[2] = _mm_aesenc_si128(m_state.S[1], M0123.by16[3]);
-    // m_state.S[1] = _mm_aesenc_si128(m_state.S[0], M0123.by16[3]);
-    m_state.S[4] = tmp.by16[0];
-    m_state.S[3] = tmp.by16[1];
-    m_state.S[2] = tmp.by16[2];
-    m_state.S[1] = tmp.by16[3];
-  }
-
-  m_state.S[0] = m_state.S[0] ^ T ^ M0123.by16[2];
+  S.S[4] = _mm_aesenc_si128(S.S[3], M0);
+  S.S[3] = _mm_aesenc_si128(S.S[2], m_rstate.R1 ^ m_rstate.R2);
+  S.S[2] = _mm_aesenc_si128(S.S[1], M3);
+  S.S[1] = _mm_aesenc_si128(S.S[0], M3);
+  S.S[0] = S.S[0] ^ T ^ M2;
   m_rstate.R2 = m_rstate.R1;
   m_rstate.R1 = m_rstate.R0;
-  m_rstate.R0 = m_rstate.RR ^ M0123.by16[1];
-  m_rstate.RR = M0123.by16[2];
+  m_rstate.R0 = m_rstate.RR ^ M1;
+  m_rstate.RR = M2;
 }
 
 void LeMac::update(std::span<const uint8_t> data) {
