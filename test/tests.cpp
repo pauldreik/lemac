@@ -265,6 +265,8 @@ TEST_CASE("unaligned access") {
   const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
   const auto actual = tohex(lm.finalize(N));
   REQUIRE(expected == actual);
+
+  REQUIRE(tohex(LeMac{K}.oneshot(M.get(), N)) == expected);
 }
 
 namespace {

@@ -243,6 +243,7 @@ void LeMac::init(std::span<const uint8_t, key_size> key) {
 }
 
 namespace {
+// assumes no alignment
 void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
                    const std::uint8_t* ptr) noexcept {
   const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
@@ -265,28 +266,25 @@ void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
   R.R0 = R.RR ^ M1;
   R.RR = M2;
 }
-void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
-                   const __m128i* ptr) noexcept {
-  const auto M0 = _mm_loadu_si128(ptr + 0);
-  const auto M1 = _mm_loadu_si128(ptr + 1);
-  const auto M2 = _mm_loadu_si128(ptr + 2);
-  const auto M3 = _mm_loadu_si128(ptr + 3);
+void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
+                           const __m128i* ptr) noexcept {
   __m128i T = S.S[8];
-  S.S[8] = _mm_aesenc_si128(S.S[7], M3);
-  S.S[7] = _mm_aesenc_si128(S.S[6], M1);
-  S.S[6] = _mm_aesenc_si128(S.S[5], M1);
-  S.S[5] = _mm_aesenc_si128(S.S[4], M0);
+  S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
+  S.S[7] = _mm_aesenc_si128(S.S[6], *(ptr + 1));
+  S.S[6] = _mm_aesenc_si128(S.S[5], *(ptr + 1));
+  S.S[5] = _mm_aesenc_si128(S.S[4], *(ptr + 0));
 
-  S.S[4] = _mm_aesenc_si128(S.S[3], M0);
+  S.S[4] = _mm_aesenc_si128(S.S[3], *(ptr + 0));
   S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
-  S.S[2] = _mm_aesenc_si128(S.S[1], M3);
-  S.S[1] = _mm_aesenc_si128(S.S[0], M3);
-  S.S[0] = S.S[0] ^ T ^ M2;
+  S.S[2] = _mm_aesenc_si128(S.S[1], *(ptr + 3));
+  S.S[1] = _mm_aesenc_si128(S.S[0], *(ptr + 3));
+  S.S[0] = S.S[0] ^ T ^ *(ptr + 2);
   R.R2 = R.R1;
   R.R1 = R.R0;
-  R.R0 = R.RR ^ M1;
-  R.RR = M2;
+  R.R0 = R.RR ^ *(ptr + 1);
+  R.RR = *(ptr + 2);
 }
+
 void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
   const __m128i M = STATE_0;
   __m128i T = S.S[8];
@@ -307,32 +305,8 @@ void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
 }
 } // namespace
 
-void LeMac::process_full_block(std::span<const uint8_t, block_size> data) {
-  auto& S = m_state.s;
-
-  const auto* ptr = data.data();
-  const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
-  const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
-  const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
-  const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
-  __m128i T = S.S[8];
-  S.S[8] = _mm_aesenc_si128(S.S[7], M3);
-  S.S[7] = _mm_aesenc_si128(S.S[6], M1);
-  S.S[6] = _mm_aesenc_si128(S.S[5], M1);
-  S.S[5] = _mm_aesenc_si128(S.S[4], M0);
-
-  S.S[4] = _mm_aesenc_si128(S.S[3], M0);
-  S.S[3] = _mm_aesenc_si128(S.S[2], m_state.r.R1 ^ m_state.r.R2);
-  S.S[2] = _mm_aesenc_si128(S.S[1], M3);
-  S.S[1] = _mm_aesenc_si128(S.S[0], M3);
-  S.S[0] = S.S[0] ^ T ^ M2;
-  m_state.r.R2 = m_state.r.R1;
-  m_state.r.R1 = m_state.r.R0;
-  m_state.r.R0 = m_state.r.RR ^ M1;
-  m_state.r.RR = M2;
-}
-
 void LeMac::update(std::span<const uint8_t> data) {
+
   bool process_entire_m_buf = false;
   std::size_t remaining_to_full_block;
   if (m_bufsize != 0) {
@@ -355,7 +329,14 @@ void LeMac::update(std::span<const uint8_t> data) {
   if (process_entire_m_buf) {
     // process the entire block
     std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
-    process_block(state.s, state.r, m_buf.data());
+    const bool buf_is_aligned =
+        (reinterpret_cast<std::uintptr_t>(m_buf.data()) %
+         std::alignment_of_v<__m128i>) == 0;
+    if (buf_is_aligned) {
+      process_aligned_block(state.s, state.r, (const __m128i*)m_buf.data());
+    } else {
+      process_block(state.s, state.r, m_buf.data());
+    }
     m_bufsize = 0;
     data = data.subspan(remaining_to_full_block);
   }
@@ -365,8 +346,16 @@ void LeMac::update(std::span<const uint8_t> data) {
   const auto block_end = data.data() + whole_blocks * block_size;
 
   auto ptr = data.data();
-  for (; ptr != block_end; ptr += block_size) {
-    process_block(state.s, state.r, ptr);
+  const bool aligned = (reinterpret_cast<std::uintptr_t>(ptr) %
+                        std::alignment_of_v<__m128i>) == 0;
+  if (aligned) {
+    for (; ptr != block_end; ptr += block_size) {
+      process_aligned_block(state.s, state.r, (const __m128i*)ptr);
+    }
+  } else {
+    for (; ptr != block_end; ptr += block_size) {
+      process_block(state.s, state.r, ptr);
+    }
   }
   m_state = state;
 
@@ -390,8 +379,13 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
   for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
     m_buf[i] = 0;
   }
-
-  process_block(m_state.s, m_state.r, m_buf.data());
+  const bool buf_is_aligned = (reinterpret_cast<std::uintptr_t>(m_buf.data()) %
+                               std::alignment_of_v<__m128i>) == 0;
+  if (buf_is_aligned) {
+    process_aligned_block(m_state.s, m_state.r, (const __m128i*)m_buf.data());
+  } else {
+    process_block(m_state.s, m_state.r, m_buf.data());
+  }
 
   // Four final rounds to absorb message state
   process_zero_block(m_state.s, m_state.r);
@@ -427,53 +421,107 @@ std::array<uint8_t, 16>
 LeMac::oneshot(std::span<const uint8_t> data,
                std::span<const uint8_t> nonce) const noexcept {
 
-  ComboState state{.s = m_context.init, .r = {}};
+  // ComboState state{.s = m_context.init, .r = {}};
+
+  Sstate S = m_context.init;
+  Rstate R{};
 
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;
   // const auto block_end = data.data() + whole_blocks * block_size;
 
-  auto ptr = (const __m128i*)data.data();
-  if (ptr) {
-    const auto block_end = ptr + whole_blocks * (block_size / sizeof(*ptr));
-    for (; ptr != block_end; ptr += block_size / sizeof(*ptr)) {
-      process_block(state.s, state.r, ptr);
+  const bool data_is_aligned = (reinterpret_cast<std::uintptr_t>(data.data()) %
+                                std::alignment_of_v<__m128i>) == 0;
+  if (data_is_aligned) {
+    auto ptr = (const __m128i*)data.data();
+    if (ptr) {
+      const auto block_end = ptr + whole_blocks * (block_size / sizeof(*ptr));
+      for (; ptr != block_end; ptr += block_size / sizeof(*ptr)) {
+        __m128i T = S.S[8];
+        S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
+        S.S[7] = _mm_aesenc_si128(S.S[6], *(ptr + 1));
+        S.S[6] = _mm_aesenc_si128(S.S[5], *(ptr + 1));
+        S.S[5] = _mm_aesenc_si128(S.S[4], *(ptr + 0));
+
+        S.S[4] = _mm_aesenc_si128(S.S[3], *(ptr + 0));
+        S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+        S.S[2] = _mm_aesenc_si128(S.S[1], *(ptr + 3));
+        S.S[1] = _mm_aesenc_si128(S.S[0], *(ptr + 3));
+        S.S[0] = S.S[0] ^ T ^ *(ptr + 2);
+        R.R2 = R.R1;
+        R.R1 = R.R0;
+        R.R0 = R.RR ^ *(ptr + 1);
+        R.RR = *(ptr + 2);
+      }
+    }
+  } else {
+    const auto block_end = data.data() + whole_blocks * block_size;
+    auto ptr = data.data();
+    for (; ptr != block_end; ptr += block_size) {
+      process_block(S, R, ptr);
     }
   }
 
   // write the tail into m_buf
   std::array<std::uint8_t, block_size> buf{};
   std::size_t bufsize = data.size() - whole_blocks * block_size;
-  std::memcpy(buf.data(), ptr, bufsize);
+  std::memcpy(buf.data(), data.data() + whole_blocks * block_size, bufsize);
 
   // let m_buf be padded
   assert(bufsize < buf.size());
   buf[bufsize] = 1;
 
-  process_block(state.s, state.r, buf.data());
+  process_block(S, R, buf.data());
 
   // Four final rounds to absorb message state
   for (int i = 0; i < 4; ++i) {
-    process_zero_block(state.s, state.r);
+    process_zero_block(S, R);
   }
-
   assert(nonce.size() == 16);
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  auto& S = state.s;
-  __m128i T = N ^ AES(m_context.keys[0], N);
-  T ^= AES_modified(m_context.subkeys, S.S[0]);
-  T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
-  T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
-  T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
-  T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
-  T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
-  T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
-  T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
-  T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
+  if constexpr (false) {
+    __m128i T = N ^ AES(m_context.keys[0], N);
+    T ^= AES_modified(m_context.subkeys, S.S[0]);
+    T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
+    T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
+    T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
+    T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
+    T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
+    T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
+    T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
+    T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
 
-  const auto tag = AES(m_context.keys[1], T);
+    const auto tag = AES(m_context.keys[1], T);
+    std::array<std::uint8_t, 16> ret;
+    _mm_storeu_si128((__m128i*)ret.data(), tag);
+    return ret;
+  } else {
+    // bäst för clang
+    return oneshot_tail(m_context, S, nonce);
+  }
+}
+
+std::array<uint8_t, 16>
+LeMac::oneshot_tail(const LeMacContext& context, Sstate& S,
+                    std::span<const std::uint8_t> nonce) noexcept {
+  assert(nonce.size() == 16);
+
+  const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
+
+  __m128i T = N ^ AES(context.keys[0], N);
+  T ^= AES_modified(context.subkeys, S.S[0]);
+  T ^= AES_modified(context.subkeys + 1, S.S[1]);
+  T ^= AES_modified(context.subkeys + 2, S.S[2]);
+  T ^= AES_modified(context.subkeys + 3, S.S[3]);
+  T ^= AES_modified(context.subkeys + 4, S.S[4]);
+  T ^= AES_modified(context.subkeys + 5, S.S[5]);
+  T ^= AES_modified(context.subkeys + 6, S.S[6]);
+  T ^= AES_modified(context.subkeys + 7, S.S[7]);
+  T ^= AES_modified(context.subkeys + 8, S.S[8]);
+
+  const auto tag = AES(context.keys[1], T);
   std::array<std::uint8_t, 16> ret;
   _mm_storeu_si128((__m128i*)ret.data(), tag);
   return ret;

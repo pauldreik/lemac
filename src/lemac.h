@@ -71,9 +71,11 @@ public:
 private:
   void init(std::span<const std::uint8_t, key_size> key);
   static constexpr std::size_t block_size = 64;
-  void process_full_block(std::span<const std::uint8_t, block_size> data);
 
 public:
+  static std::array<std::uint8_t, 16>
+  oneshot_tail(const LeMacContext& context, Sstate& state,
+               std::span<const std::uint8_t> nonce) noexcept;
   LeMacContext m_context;
   ComboState m_state;
   std::array<std::uint8_t, block_size> m_buf{};
