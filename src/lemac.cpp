@@ -394,9 +394,6 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
   process_zero_block(m_state.s, m_state.r);
 
   assert(nonce.size() == 16);
-  // if (nonce.size() != 16) {
-  //   throw std::runtime_error("wrong size of nonce");
-  // }
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
@@ -417,18 +414,16 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
 }
 
 void LeMac::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
+
 std::array<uint8_t, 16>
 LeMac::oneshot(std::span<const uint8_t> data,
                std::span<const uint8_t> nonce) const noexcept {
-
-  // ComboState state{.s = m_context.init, .r = {}};
 
   Sstate S = m_context.init;
   Rstate R{};
 
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;
-  // const auto block_end = data.data() + whole_blocks * block_size;
 
   const bool data_is_aligned = (reinterpret_cast<std::uintptr_t>(data.data()) %
                                 std::alignment_of_v<__m128i>) == 0;
