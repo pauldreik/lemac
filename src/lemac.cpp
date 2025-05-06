@@ -402,22 +402,24 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
 
 void LeMac::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
 std::array<uint8_t, 16> LeMac::oneshot(std::span<const uint8_t> data,
-                                       std::span<const uint8_t> nonce) {
+                                       std::span<const uint8_t> nonce) const {
 
   auto state = m_state;
+  std::array<std::uint8_t, block_size> buf;
+  std::size_t bufsize = 0;
   do {
     bool process_entire_m_buf = false;
     std::size_t remaining_to_full_block;
-    if (m_bufsize != 0) {
+    if (bufsize != 0) {
       // fill the remainder of m_buf from data and process a whole block if
       // possible
       assert(m_bufsize < block_size);
-      remaining_to_full_block = block_size - m_bufsize;
+      remaining_to_full_block = block_size - bufsize;
       if (data.size() < remaining_to_full_block) {
         // not enough data for a full block, append to the buffer and hope for
         // better luck next time
-        std::memcpy(&m_buf[m_bufsize], data.data(), data.size());
-        m_bufsize += data.size();
+        std::memcpy(&buf[bufsize], data.data(), data.size());
+        bufsize += data.size();
         break;
       }
       process_entire_m_buf = true;
@@ -425,9 +427,9 @@ std::array<uint8_t, 16> LeMac::oneshot(std::span<const uint8_t> data,
 
     if (process_entire_m_buf) {
       // process the entire block
-      std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
-      process_block(state.s, state.r, m_buf.data());
-      m_bufsize = 0;
+      std::memcpy(&buf[bufsize], data.data(), remaining_to_full_block);
+      process_block(state.s, state.r, buf.data());
+      bufsize = 0;
       data = data.subspan(remaining_to_full_block);
     }
 
@@ -441,16 +443,16 @@ std::array<uint8_t, 16> LeMac::oneshot(std::span<const uint8_t> data,
     }
 
     // write the tail into m_buf
-    m_bufsize = data.size() - whole_blocks * block_size;
-    std::memcpy(m_buf.data(), ptr, m_bufsize);
+    bufsize = data.size() - whole_blocks * block_size;
+    std::memcpy(buf.data(), ptr, bufsize);
   } while (0);
   // let m_buf be padded
-  m_buf.at(m_bufsize) = 1;
-  for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
-    m_buf[i] = 0;
+  buf.at(bufsize) = 1;
+  for (std::size_t i = bufsize + 1; i < buf.size(); ++i) {
+    buf[i] = 0;
   }
 
-  process_block(state.s, state.r, m_buf.data());
+  process_block(state.s, state.r, buf.data());
 
   // Four final rounds to absorb message state
   process_zero_block(state.s, state.r);
