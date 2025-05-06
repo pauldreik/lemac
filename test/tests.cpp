@@ -117,6 +117,28 @@ TEST_CASE("alternate api - 16 zeros input") {
   REQUIRE(expected == actual);
 }
 
+TEST_CASE("oneshot - 16 zeros input") {
+  LeMac lm;
+  constexpr auto MSIZE = 16;
+
+  uint8_t M[MSIZE] = {};
+
+  const std::string expected = "26fa471b77facc73ec2f9b50bb1af864";
+  const auto actual = tohex(lm.oneshot(std::span(M, MSIZE)));
+  REQUIRE(expected == actual);
+}
+
+TEST_CASE("oneshot - 1 zero input") {
+  LeMac lm;
+  constexpr auto MSIZE = 1;
+
+  uint8_t M[MSIZE] = {};
+  lm.update(std::span(M, MSIZE));
+  const auto update_and_finalize = tohex(lm.finalize());
+  const auto oneshot = tohex(LeMac{}.oneshot(std::span(M, MSIZE)));
+  REQUIRE(update_and_finalize == oneshot);
+}
+
 TEST_CASE("the hasher can be reset") {
   const std::vector<std::uint8_t> data{0x20, 0x42};
   LeMac lemac;
@@ -170,6 +192,9 @@ TEST_CASE("alternate api - iota nonces,key,input") {
   const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
   const auto actual = tohex(lm.finalize(std::span(N, 16)));
   REQUIRE(expected == actual);
+
+  REQUIRE(tohex(LeMac{std::span(K, 16)}.oneshot(std::span(M, MSIZE),
+                                                std::span(N, 16))) == expected);
 }
 
 TEST_CASE("partial updates") {
@@ -261,6 +286,16 @@ template <std::size_t MSIZE> void benchmark() {
       lemac.reset();
       lemac.update(std::span(M));
       const auto tmp = lemac.finalize(std::span(N));
+      M[0] = tmp[0];
+      return tmp[0];
+    };
+  }
+
+  {
+    LeMac lemac(std::span(K, 16));
+    BENCHMARK("C++ oneshot") {
+      lemac.reset();
+      const auto tmp = lemac.oneshot(std::span(M), std::span(N));
       M[0] = tmp[0];
       return tmp[0];
     };

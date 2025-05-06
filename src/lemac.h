@@ -31,6 +31,10 @@ public:
   void update(std::span<const std::uint8_t> data);
 
   std::array<std::uint8_t, 16>
+  oneshot(std::span<const std::uint8_t> data,
+          std::span<const std::uint8_t> nonce = std::span{zero_key});
+
+  std::array<std::uint8_t, 16>
   finalize(std::span<const std::uint8_t> nonce = std::span{zero_key});
   void finalize_to(std::span<const std::uint8_t> nonce,
                    std::span<std::uint8_t, 16> target);

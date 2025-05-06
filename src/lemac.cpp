@@ -401,3 +401,81 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
 }
 
 void LeMac::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
+std::array<uint8_t, 16> LeMac::oneshot(std::span<const uint8_t> data,
+                                       std::span<const uint8_t> nonce) {
+
+  auto state = m_state;
+  do {
+    bool process_entire_m_buf = false;
+    std::size_t remaining_to_full_block;
+    if (m_bufsize != 0) {
+      // fill the remainder of m_buf from data and process a whole block if
+      // possible
+      assert(m_bufsize < block_size);
+      remaining_to_full_block = block_size - m_bufsize;
+      if (data.size() < remaining_to_full_block) {
+        // not enough data for a full block, append to the buffer and hope for
+        // better luck next time
+        std::memcpy(&m_buf[m_bufsize], data.data(), data.size());
+        m_bufsize += data.size();
+        break;
+      }
+      process_entire_m_buf = true;
+    }
+
+    if (process_entire_m_buf) {
+      // process the entire block
+      std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
+      process_block(state.s, state.r, m_buf.data());
+      m_bufsize = 0;
+      data = data.subspan(remaining_to_full_block);
+    }
+
+    // process whole blocks
+    const auto whole_blocks = data.size() / block_size;
+    const auto block_end = data.data() + whole_blocks * block_size;
+
+    auto ptr = data.data();
+    for (; ptr != block_end; ptr += block_size) {
+      process_block(state.s, state.r, ptr);
+    }
+
+    // write the tail into m_buf
+    m_bufsize = data.size() - whole_blocks * block_size;
+    std::memcpy(m_buf.data(), ptr, m_bufsize);
+  } while (0);
+  // let m_buf be padded
+  m_buf.at(m_bufsize) = 1;
+  for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
+    m_buf[i] = 0;
+  }
+
+  process_block(state.s, state.r, m_buf.data());
+
+  // Four final rounds to absorb message state
+  process_zero_block(state.s, state.r);
+  process_zero_block(state.s, state.r);
+  process_zero_block(state.s, state.r);
+  process_zero_block(state.s, state.r);
+
+  assert(nonce.size() == 16);
+
+  const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
+
+  auto& S = state.s;
+  __m128i T = N ^ AES(m_context.keys[0], N);
+  T ^= AES_modified(m_context.subkeys, S.S[0]);
+  T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
+  T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
+  T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
+  T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
+  T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
+  T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
+  T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
+  T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
+
+  const auto tag = AES(m_context.keys[1], T);
+  std::array<std::uint8_t, 16> ret;
+  _mm_storeu_si128((__m128i*)ret.data(), tag);
+  return ret;
+}
