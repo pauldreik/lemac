@@ -374,10 +374,11 @@ LeMac::finalize(std::span<const std::uint8_t> nonce) {
 }
 
 void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
-                        std::span<std::uint8_t, 16> target) {
+                        std::span<std::uint8_t, 16> target) noexcept {
 
   // let m_buf be padded
-  m_buf.at(m_bufsize) = 1;
+  assert(m_bufsize < m_buf.size());
+  m_buf[m_bufsize] = 1;
   for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
     m_buf[i] = 0;
   }
@@ -401,24 +402,28 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
     }
   }
 
-  assert(nonce.size() == 16);
+  if constexpr (compile_time_options::finalize_uses_tail) {
+    tail(m_context, m_state.s, nonce, target);
+  } else {
+    assert(nonce.size() == 16);
 
-  const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
+    const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  auto& S = m_state.s;
-  __m128i T = N ^ AES(m_context.keys[0], N);
-  T ^= AES_modified(m_context.subkeys, S.S[0]);
-  T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
-  T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
-  T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
-  T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
-  T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
-  T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
-  T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
-  T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
+    auto& S = m_state.s;
+    __m128i T = N ^ AES(m_context.keys[0], N);
+    T ^= AES_modified(m_context.subkeys, S.S[0]);
+    T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
+    T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
+    T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
+    T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
+    T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
+    T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
+    T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
+    T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
 
-  const auto tag = AES(m_context.keys[1], T);
-  _mm_storeu_si128((__m128i*)target.data(), tag);
+    const auto tag = AES(m_context.keys[1], T);
+    _mm_storeu_si128((__m128i*)target.data(), tag);
+  }
 }
 
 void LeMac::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
@@ -519,7 +524,7 @@ LeMac::oneshot(std::span<const uint8_t> data,
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  if constexpr (!compile_time_options::use_oneshot_tail) {
+  if constexpr (!compile_time_options::oneshot_uses_tail) {
     __m128i T = N ^ AES(m_context.keys[0], N);
     T ^= AES_modified(m_context.subkeys, S.S[0]);
     T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
@@ -538,13 +543,15 @@ LeMac::oneshot(std::span<const uint8_t> data,
   } else {
     // bäst för clang (50 istället för 44 GB/s)
     // gcc - spelar ingen roll
-    return oneshot_tail(m_context, S, nonce);
+    std::array<std::uint8_t, 16> ret;
+    tail(m_context, S, nonce, ret);
+    return ret;
   }
 }
 
-std::array<uint8_t, 16>
-LeMac::oneshot_tail(const LeMacContext& context, Sstate& S,
-                    std::span<const std::uint8_t> nonce) noexcept {
+void LeMac::tail(const LeMacContext& context, Sstate& S,
+                 std::span<const std::uint8_t> nonce,
+                 std::span<std::uint8_t, 16> target) const noexcept {
   assert(nonce.size() == 16);
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
@@ -561,7 +568,5 @@ LeMac::oneshot_tail(const LeMacContext& context, Sstate& S,
   T ^= AES_modified(context.subkeys + 8, S.S[8]);
 
   const auto tag = AES(context.keys[1], T);
-  std::array<std::uint8_t, 16> ret;
-  _mm_storeu_si128((__m128i*)ret.data(), tag);
-  return ret;
+  _mm_storeu_si128((__m128i*)target.data(), tag);
 }

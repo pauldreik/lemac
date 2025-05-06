@@ -8,11 +8,15 @@
 #include <stdint.h>
 
 struct compile_time_options {
-  /// clang - best with true, gcc doesn't care
-  constexpr static inline bool use_oneshot_tail = true;
-  /// does not seem to be so important
-  constexpr static inline bool unroll_zero_blocks = true;
-  /// does not seem to be so important
+  /// clang - best with true for inputs larger than a few kB (10% faster), but
+  /// best with false for small inputs (10% faster)
+  /// gcc - faster with false
+  constexpr static inline bool oneshot_uses_tail = false;
+  /// gcc and clang - both are faster with false
+  constexpr static inline bool finalize_uses_tail = false;
+  /// does not seem to be important
+  constexpr static inline bool unroll_zero_blocks = false;
+  /// does not seem to be important
   constexpr static inline bool inline_processing = false;
 };
 
@@ -46,7 +50,7 @@ public:
   std::array<std::uint8_t, 16>
   finalize(std::span<const std::uint8_t> nonce = std::span{zero_key});
   void finalize_to(std::span<const std::uint8_t> nonce,
-                   std::span<std::uint8_t, 16> target);
+                   std::span<std::uint8_t, 16> target) noexcept;
 
   void reset();
 
@@ -82,9 +86,9 @@ private:
   static constexpr std::size_t block_size = 64;
 
 public:
-  static std::array<std::uint8_t, 16>
-  oneshot_tail(const LeMacContext& context, Sstate& state,
-               std::span<const std::uint8_t> nonce) noexcept;
+  void tail(const LeMacContext& context, Sstate& state,
+            std::span<const std::uint8_t> nonce,
+            std::span<std::uint8_t, 16> target) const noexcept;
   LeMacContext m_context;
   ComboState m_state;
   std::array<std::uint8_t, block_size> m_buf{};
