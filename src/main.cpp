@@ -41,7 +41,6 @@ std::string run_lemac(std::span<const char> data) {
 }
 
 void checksum(const std::string& filename) {
-  bool advise = true;
 
   // FIXME: make RAII helpers for the cleanup functions
 
