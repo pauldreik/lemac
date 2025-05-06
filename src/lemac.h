@@ -7,19 +7,6 @@
 #include <immintrin.h>
 #include <stdint.h>
 
-struct compile_time_options {
-  /// clang - best with true for inputs larger than a few kB (10% faster), but
-  /// best with false for small inputs (10% faster)
-  /// gcc - faster with false
-  constexpr static inline bool oneshot_uses_tail = false;
-  /// gcc and clang - both are faster with false
-  constexpr static inline bool finalize_uses_tail = false;
-  /// does not seem to be important
-  constexpr static inline bool unroll_zero_blocks = false;
-  /// does not seem to be important
-  constexpr static inline bool inline_processing = false;
-};
-
 typedef struct {
   __m128i S[9];
 } state;
@@ -36,6 +23,19 @@ void lemac_MAC(context* ctx, const uint8_t* nonce, const uint8_t* m,
 
 class LeMac {
 public:
+  struct compile_time_options {
+    /// clang - best with true for inputs larger than a few kB (10% faster), but
+    /// best with false for small inputs (10% faster)
+    /// gcc - faster with false
+    constexpr static inline bool oneshot_uses_tail = false;
+    /// gcc and clang - both are faster with false
+    constexpr static inline bool finalize_uses_tail = false;
+    /// does not seem to be important
+    constexpr static inline bool unroll_zero_blocks = false;
+    /// does not seem to be important
+    constexpr static inline bool inline_processing = false;
+  };
+
   static constexpr std::size_t key_size = 16;
   explicit LeMac(std::span<const std::uint8_t, key_size> key = std::span{
                      zero_key});
@@ -49,6 +49,7 @@ public:
 
   std::array<std::uint8_t, 16>
   finalize(std::span<const std::uint8_t> nonce = std::span{zero_key});
+
   void finalize_to(std::span<const std::uint8_t> nonce,
                    std::span<std::uint8_t, 16> target) noexcept;
 
@@ -57,9 +58,9 @@ public:
   static constexpr std::array<const std::uint8_t, key_size> zero_key{};
 
   struct Sstate {
-    static constexpr inline auto count = 9uz;
     __m128i S[9];
   };
+
   struct Rstate {
     void reset();
     __m128i RR;
@@ -67,6 +68,7 @@ public:
     __m128i R1;
     __m128i R2;
   };
+
   // this is the state that changes during absorption of data
   struct ComboState {
     Sstate s;
@@ -79,13 +81,11 @@ public:
     __m128i keys[2][11];
     __m128i subkeys[18];
   };
-  static_assert(sizeof(LeMacContext) == 784);
 
 private:
   void init(std::span<const std::uint8_t, key_size> key);
   static constexpr std::size_t block_size = 64;
 
-public:
   void tail(const LeMacContext& context, Sstate& state,
             std::span<const std::uint8_t> nonce,
             std::span<std::uint8_t, 16> target) const noexcept;

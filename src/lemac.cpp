@@ -243,9 +243,14 @@ void LeMac::init(std::span<const uint8_t, key_size> key) {
 }
 
 namespace {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+constexpr auto vector_register_alignment = std::alignment_of_v<__m128i>;
+#pragma GCC diagnostic pop
+
 // assumes no alignment
-void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
-                   const std::uint8_t* ptr) noexcept {
+inline void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
+                          const std::uint8_t* ptr) noexcept {
   const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
   const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
   const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
@@ -266,8 +271,8 @@ void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
   R.R0 = R.RR ^ M1;
   R.RR = M2;
 }
-void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
-                           const __m128i* ptr) noexcept {
+inline void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
+                                  const __m128i* ptr) noexcept {
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
   S.S[7] = _mm_aesenc_si128(S.S[6], *(ptr + 1));
@@ -285,7 +290,7 @@ void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
   R.RR = *(ptr + 2);
 }
 
-void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
+inline void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
   const __m128i M = STATE_0;
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], M);
@@ -333,7 +338,7 @@ void LeMac::update(std::span<const uint8_t> data) {
     std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
     const bool buf_is_aligned =
         (reinterpret_cast<std::uintptr_t>(m_buf.data()) %
-         std::alignment_of_v<__m128i>) == 0;
+         vector_register_alignment) == 0;
     if (buf_is_aligned) {
       process_aligned_block(state.s, state.r, (const __m128i*)m_buf.data());
     } else {
@@ -348,8 +353,8 @@ void LeMac::update(std::span<const uint8_t> data) {
   const auto block_end = data.data() + whole_blocks * block_size;
 
   auto ptr = data.data();
-  const bool aligned = (reinterpret_cast<std::uintptr_t>(ptr) %
-                        std::alignment_of_v<__m128i>) == 0;
+  const bool aligned =
+      (reinterpret_cast<std::uintptr_t>(ptr) % vector_register_alignment) == 0;
   if (aligned) {
     for (; ptr != block_end; ptr += block_size) {
       process_aligned_block(state.s, state.r, (const __m128i*)ptr);
@@ -383,7 +388,7 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
     m_buf[i] = 0;
   }
   const bool buf_is_aligned = (reinterpret_cast<std::uintptr_t>(m_buf.data()) %
-                               std::alignment_of_v<__m128i>) == 0;
+                               vector_register_alignment) == 0;
   if (buf_is_aligned) {
     process_aligned_block(m_state.s, m_state.r, (const __m128i*)m_buf.data());
   } else {
@@ -441,7 +446,7 @@ LeMac::oneshot(std::span<const uint8_t> data,
   if (whole_blocks) {
     const bool data_is_aligned =
         (reinterpret_cast<std::uintptr_t>(data.data()) %
-         std::alignment_of_v<__m128i>) == 0;
+         vector_register_alignment) == 0;
     if (data_is_aligned) {
       auto ptr = (const __m128i*)data.data();
       const auto step = (block_size / sizeof(*ptr));
@@ -541,8 +546,6 @@ LeMac::oneshot(std::span<const uint8_t> data,
     _mm_storeu_si128((__m128i*)ret.data(), tag);
     return ret;
   } else {
-    // bäst för clang (50 istället för 44 GB/s)
-    // gcc - spelar ingen roll
     std::array<std::uint8_t, 16> ret;
     tail(m_context, S, nonce, ret);
     return ret;
