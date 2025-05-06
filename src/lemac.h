@@ -8,7 +8,12 @@
 #include <stdint.h>
 
 struct compile_time_options {
+  /// clang - best with true, gcc doesn't care
   constexpr static inline bool use_oneshot_tail = true;
+  /// does not seem to be so important
+  constexpr static inline bool unroll_zero_blocks = true;
+  /// does not seem to be so important
+  constexpr static inline bool inline_processing = false;
 };
 
 typedef struct {

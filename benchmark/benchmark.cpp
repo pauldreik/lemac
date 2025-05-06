@@ -93,7 +93,12 @@ auto get_compiler() {
 }
 
 void print_config() {
-  fmt::println("use oneshot tail: {}", compile_time_options::use_oneshot_tail);
+  fmt::println("  use oneshot tail: {}",
+               compile_time_options::use_oneshot_tail);
+  fmt::println("unroll zero blocks: {}",
+               compile_time_options::unroll_zero_blocks);
+  fmt::println(" inline processing: {}",
+               compile_time_options::inline_processing);
 }
 
 void run_all() {

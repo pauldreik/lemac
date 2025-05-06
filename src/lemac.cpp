@@ -388,10 +388,16 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
   }
 
   // Four final rounds to absorb message state
-  process_zero_block(m_state.s, m_state.r);
-  process_zero_block(m_state.s, m_state.r);
-  process_zero_block(m_state.s, m_state.r);
-  process_zero_block(m_state.s, m_state.r);
+  if constexpr (compile_time_options::unroll_zero_blocks) {
+    process_zero_block(m_state.s, m_state.r);
+    process_zero_block(m_state.s, m_state.r);
+    process_zero_block(m_state.s, m_state.r);
+    process_zero_block(m_state.s, m_state.r);
+  } else {
+    for (int i = 0; i < 4; ++i) {
+      process_zero_block(m_state.s, m_state.r);
+    }
+  }
 
   assert(nonce.size() == 16);
 
@@ -425,35 +431,63 @@ LeMac::oneshot(std::span<const uint8_t> data,
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;
 
-  const bool data_is_aligned = (reinterpret_cast<std::uintptr_t>(data.data()) %
-                                std::alignment_of_v<__m128i>) == 0;
-  if (data_is_aligned) {
-    auto ptr = (const __m128i*)data.data();
-    if (ptr) {
-      const auto block_end = ptr + whole_blocks * (block_size / sizeof(*ptr));
-      for (; ptr != block_end; ptr += block_size / sizeof(*ptr)) {
-        __m128i T = S.S[8];
-        S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
-        S.S[7] = _mm_aesenc_si128(S.S[6], *(ptr + 1));
-        S.S[6] = _mm_aesenc_si128(S.S[5], *(ptr + 1));
-        S.S[5] = _mm_aesenc_si128(S.S[4], *(ptr + 0));
+  if (whole_blocks) {
+    const bool data_is_aligned =
+        (reinterpret_cast<std::uintptr_t>(data.data()) %
+         std::alignment_of_v<__m128i>) == 0;
+    if (data_is_aligned) {
+      auto ptr = (const __m128i*)data.data();
+      const auto step = (block_size / sizeof(*ptr));
+      const auto block_end = ptr + whole_blocks * step;
+      for (; ptr != block_end; ptr += step) {
+        if constexpr (compile_time_options::inline_processing) {
+          __m128i T = S.S[8];
+          S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
+          S.S[7] = _mm_aesenc_si128(S.S[6], *(ptr + 1));
+          S.S[6] = _mm_aesenc_si128(S.S[5], *(ptr + 1));
+          S.S[5] = _mm_aesenc_si128(S.S[4], *(ptr + 0));
 
-        S.S[4] = _mm_aesenc_si128(S.S[3], *(ptr + 0));
-        S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
-        S.S[2] = _mm_aesenc_si128(S.S[1], *(ptr + 3));
-        S.S[1] = _mm_aesenc_si128(S.S[0], *(ptr + 3));
-        S.S[0] = S.S[0] ^ T ^ *(ptr + 2);
-        R.R2 = R.R1;
-        R.R1 = R.R0;
-        R.R0 = R.RR ^ *(ptr + 1);
-        R.RR = *(ptr + 2);
+          S.S[4] = _mm_aesenc_si128(S.S[3], *(ptr + 0));
+          S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+          S.S[2] = _mm_aesenc_si128(S.S[1], *(ptr + 3));
+          S.S[1] = _mm_aesenc_si128(S.S[0], *(ptr + 3));
+          S.S[0] = S.S[0] ^ T ^ *(ptr + 2);
+          R.R2 = R.R1;
+          R.R1 = R.R0;
+          R.R0 = R.RR ^ *(ptr + 1);
+          R.RR = *(ptr + 2);
+        } else {
+          process_aligned_block(S, R, ptr);
+        }
       }
-    }
-  } else {
-    const auto block_end = data.data() + whole_blocks * block_size;
-    auto ptr = data.data();
-    for (; ptr != block_end; ptr += block_size) {
-      process_block(S, R, ptr);
+    } else {
+      const auto block_end = data.data() + whole_blocks * block_size;
+      auto ptr = data.data();
+      for (; ptr != block_end; ptr += block_size) {
+        if constexpr (compile_time_options::inline_processing) {
+          const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
+          const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
+          const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
+          const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
+          __m128i T = S.S[8];
+          S.S[8] = _mm_aesenc_si128(S.S[7], M3);
+          S.S[7] = _mm_aesenc_si128(S.S[6], M1);
+          S.S[6] = _mm_aesenc_si128(S.S[5], M1);
+          S.S[5] = _mm_aesenc_si128(S.S[4], M0);
+
+          S.S[4] = _mm_aesenc_si128(S.S[3], M0);
+          S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+          S.S[2] = _mm_aesenc_si128(S.S[1], M3);
+          S.S[1] = _mm_aesenc_si128(S.S[0], M3);
+          S.S[0] = S.S[0] ^ T ^ M2;
+          R.R2 = R.R1;
+          R.R1 = R.R0;
+          R.R0 = R.RR ^ M1;
+          R.RR = M2;
+        } else {
+          process_block(S, R, ptr);
+        }
+      }
     }
   }
 
@@ -469,8 +503,15 @@ LeMac::oneshot(std::span<const uint8_t> data,
   process_block(S, R, buf.data());
 
   // Four final rounds to absorb message state
-  for (int i = 0; i < 4; ++i) {
+  if constexpr (compile_time_options::unroll_zero_blocks) {
     process_zero_block(S, R);
+    process_zero_block(S, R);
+    process_zero_block(S, R);
+    process_zero_block(S, R);
+  } else {
+    for (int i = 0; i < 4; ++i) {
+      process_zero_block(S, R);
+    }
   }
   assert(nonce.size() == 16);
 
@@ -493,7 +534,8 @@ LeMac::oneshot(std::span<const uint8_t> data,
     _mm_storeu_si128((__m128i*)ret.data(), tag);
     return ret;
   } else {
-    // bäst för clang
+    // bäst för clang (50 istället för 44 GB/s)
+    // gcc - spelar ingen roll
     return oneshot_tail(m_context, S, nonce);
   }
 }
