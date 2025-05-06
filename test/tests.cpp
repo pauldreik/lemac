@@ -294,7 +294,7 @@ template <std::size_t MSIZE> void benchmark() {
   {
     LeMac lemac(std::span(K, 16));
     BENCHMARK("C++ oneshot") {
-      lemac.reset();
+      // lemac.reset();
       const auto tmp = lemac.oneshot(std::span(M), std::span(N));
       M[0] = tmp[0];
       return tmp[0];

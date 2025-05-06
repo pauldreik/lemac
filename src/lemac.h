@@ -30,9 +30,9 @@ public:
 
   void update(std::span<const std::uint8_t> data);
 
-  std::array<std::uint8_t, 16>
-  oneshot(std::span<const std::uint8_t> data,
-          std::span<const std::uint8_t> nonce = std::span{zero_key}) const;
+  std::array<std::uint8_t, 16> oneshot(
+      std::span<const std::uint8_t> data,
+      std::span<const std::uint8_t> nonce = std::span{zero_key}) const noexcept;
 
   std::array<std::uint8_t, 16>
   finalize(std::span<const std::uint8_t> nonce = std::span{zero_key});

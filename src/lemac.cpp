@@ -244,7 +244,7 @@ void LeMac::init(std::span<const uint8_t, key_size> key) {
 
 namespace {
 void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
-                   const std::uint8_t* ptr) {
+                   const std::uint8_t* ptr) noexcept {
   const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
   const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
   const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
@@ -265,7 +265,29 @@ void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
   R.R0 = R.RR ^ M1;
   R.RR = M2;
 }
-void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) {
+void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
+                   const __m128i* ptr) noexcept {
+  const auto M0 = _mm_loadu_si128(ptr + 0);
+  const auto M1 = _mm_loadu_si128(ptr + 1);
+  const auto M2 = _mm_loadu_si128(ptr + 2);
+  const auto M3 = _mm_loadu_si128(ptr + 3);
+  __m128i T = S.S[8];
+  S.S[8] = _mm_aesenc_si128(S.S[7], M3);
+  S.S[7] = _mm_aesenc_si128(S.S[6], M1);
+  S.S[6] = _mm_aesenc_si128(S.S[5], M1);
+  S.S[5] = _mm_aesenc_si128(S.S[4], M0);
+
+  S.S[4] = _mm_aesenc_si128(S.S[3], M0);
+  S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+  S.S[2] = _mm_aesenc_si128(S.S[1], M3);
+  S.S[1] = _mm_aesenc_si128(S.S[0], M3);
+  S.S[0] = S.S[0] ^ T ^ M2;
+  R.R2 = R.R1;
+  R.R1 = R.R0;
+  R.R0 = R.RR ^ M1;
+  R.RR = M2;
+}
+void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
   const __m128i M = STATE_0;
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], M);
@@ -401,64 +423,39 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
 }
 
 void LeMac::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
-std::array<uint8_t, 16> LeMac::oneshot(std::span<const uint8_t> data,
-                                       std::span<const uint8_t> nonce) const {
+std::array<uint8_t, 16>
+LeMac::oneshot(std::span<const uint8_t> data,
+               std::span<const uint8_t> nonce) const noexcept {
 
-  auto state = m_state;
-  std::array<std::uint8_t, block_size> buf;
-  std::size_t bufsize = 0;
-  do {
-    bool process_entire_m_buf = false;
-    std::size_t remaining_to_full_block;
-    if (bufsize != 0) {
-      // fill the remainder of m_buf from data and process a whole block if
-      // possible
-      assert(m_bufsize < block_size);
-      remaining_to_full_block = block_size - bufsize;
-      if (data.size() < remaining_to_full_block) {
-        // not enough data for a full block, append to the buffer and hope for
-        // better luck next time
-        std::memcpy(&buf[bufsize], data.data(), data.size());
-        bufsize += data.size();
-        break;
-      }
-      process_entire_m_buf = true;
-    }
+  ComboState state{.s = m_context.init, .r = {}};
 
-    if (process_entire_m_buf) {
-      // process the entire block
-      std::memcpy(&buf[bufsize], data.data(), remaining_to_full_block);
-      process_block(state.s, state.r, buf.data());
-      bufsize = 0;
-      data = data.subspan(remaining_to_full_block);
-    }
+  // process whole blocks
+  const auto whole_blocks = data.size() / block_size;
+  // const auto block_end = data.data() + whole_blocks * block_size;
 
-    // process whole blocks
-    const auto whole_blocks = data.size() / block_size;
-    const auto block_end = data.data() + whole_blocks * block_size;
-
-    auto ptr = data.data();
-    for (; ptr != block_end; ptr += block_size) {
+  auto ptr = (const __m128i*)data.data();
+  if (ptr) {
+    const auto block_end = ptr + whole_blocks * (block_size / sizeof(*ptr));
+    for (; ptr != block_end; ptr += block_size / sizeof(*ptr)) {
       process_block(state.s, state.r, ptr);
     }
-
-    // write the tail into m_buf
-    bufsize = data.size() - whole_blocks * block_size;
-    std::memcpy(buf.data(), ptr, bufsize);
-  } while (0);
-  // let m_buf be padded
-  buf.at(bufsize) = 1;
-  for (std::size_t i = bufsize + 1; i < buf.size(); ++i) {
-    buf[i] = 0;
   }
+
+  // write the tail into m_buf
+  std::array<std::uint8_t, block_size> buf{};
+  std::size_t bufsize = data.size() - whole_blocks * block_size;
+  std::memcpy(buf.data(), ptr, bufsize);
+
+  // let m_buf be padded
+  assert(bufsize < buf.size());
+  buf[bufsize] = 1;
 
   process_block(state.s, state.r, buf.data());
 
   // Four final rounds to absorb message state
-  process_zero_block(state.s, state.r);
-  process_zero_block(state.s, state.r);
-  process_zero_block(state.s, state.r);
-  process_zero_block(state.s, state.r);
+  for (int i = 0; i < 4; ++i) {
+    process_zero_block(state.s, state.r);
+  }
 
   assert(nonce.size() == 16);
 
