@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # add_compile_options(-fsanitize=address,undefined)
 # add_link_options(-fsanitize=address,undefined)
 
-add_compile_options(-Wall -Wextra -pedantic)
+add_compile_options(-Wall -Wextra -pedantic -Wunused)
 
 add_library(lemac
     src/lemac.cpp
@@ -19,7 +19,7 @@ target_compile_options(lemac PRIVATE -maes -msse2)
 target_include_directories(lemac PUBLIC src)
 
 add_subdirectory(test)
-
+add_subdirectory(benchmark/)
 
 
 add_executable(lemacsum
