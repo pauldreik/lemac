@@ -476,7 +476,7 @@ LeMac::oneshot(std::span<const uint8_t> data,
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  if constexpr (false) {
+  if constexpr (!compile_time_options::use_oneshot_tail) {
     __m128i T = N ^ AES(m_context.keys[0], N);
     T ^= AES_modified(m_context.subkeys, S.S[0]);
     T ^= AES_modified(m_context.subkeys + 1, S.S[1]);

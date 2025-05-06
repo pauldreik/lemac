@@ -7,6 +7,10 @@
 #include <immintrin.h>
 #include <stdint.h>
 
+struct compile_time_options {
+  constexpr static inline bool use_oneshot_tail = true;
+};
+
 typedef struct {
   __m128i S[9];
 } state;

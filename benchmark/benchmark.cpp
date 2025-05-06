@@ -83,6 +83,19 @@ void run_testcase(const options& opt) {
                speed.data_rate() * 1e-9, speed.hash_rate() * 1e6);
 }
 
+auto get_compiler() {
+#if defined(__clang__)
+  return "clang";
+#endif
+#if defined(__GNUC__)
+  return "gcc";
+#endif
+}
+
+void print_config() {
+  fmt::println("use oneshot tail: {}", compile_time_options::use_oneshot_tail);
+}
+
 void run_all() {
   options opt{};
   for (auto size : {1, 1024, 16 * 1024, 256 * 1024, 1024 * 1024}) {
@@ -94,4 +107,8 @@ void run_all() {
   }
 }
 
-int main(int argc, char* argv[]) { run_all(); }
+int main(int argc, char* argv[]) {
+  fmt::println("compiler: {}", get_compiler());
+  print_config();
+  run_all();
+}
