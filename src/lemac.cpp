@@ -324,6 +324,8 @@ void LeMac::update(std::span<const uint8_t> data) {
     process_entire_m_buf = true;
   }
 
+  // operate on a copy of the state and write it back later, this is 2.5x
+  // faster than operating on m_state directly
   auto state = m_state;
 
   if (process_entire_m_buf) {
