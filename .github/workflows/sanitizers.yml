@@ -1,0 +1,44 @@
+name: ubuntu sanitizers
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+    strategy:
+      matrix:
+        BUILD_TYPE: [Debug, Release]
+        CXX: [g++-14, clang++-18]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@v7
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Configure CMake
+      run: cmake --preset=github-workflow-vcpkg -DLEMAC_SANITIZERS=On -DCMAKE_CXX_COMPILER=${{matrix.CXX}} -B ${{github.workspace}}/build-${{matrix.BUILD_TYPE}} -DCMAKE_BUILD_TYPE=${{matrix.BUILD_TYPE}}
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build-${{matrix.BUILD_TYPE}} --config ${{matrix.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build-${{matrix.BUILD_TYPE}}
+      run: ctest -C ${{matrix.BUILD_TYPE}}
+
+    - name: Execute benchmark (with sanitizers)
+      working-directory: ${{github.workspace}}/build-${{matrix.BUILD_TYPE}}
+      run: benchmark/benchmark
+
