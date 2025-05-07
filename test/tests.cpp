@@ -197,6 +197,23 @@ TEST_CASE("alternate api - iota nonces,key,input") {
                                                 std::span(N, 16))) == expected);
 }
 
+TEST_CASE("empty input") {
+  std::vector<std::uint8_t> nodata;
+  // test multiple ways
+  const auto a = LeMac{}.oneshot(nodata);
+  LeMac lemac;
+  lemac.update(nodata);
+  const auto b = lemac.finalize();
+  lemac.reset();
+  lemac.update(nodata);
+  const auto c = lemac.finalize();
+  const auto d = LeMac{}.finalize();
+
+  REQUIRE(a == b);
+  REQUIRE(a == c);
+  REQUIRE(a == d);
+}
+
 TEST_CASE("partial updates") {
   constexpr auto MSIZE = 65;
 

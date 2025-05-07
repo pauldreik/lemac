@@ -368,7 +368,9 @@ void LeMac::update(std::span<const uint8_t> data) {
 
   // write the tail into m_buf
   m_bufsize = data.size() - whole_blocks * block_size;
-  std::memcpy(m_buf.data(), ptr, m_bufsize);
+  if (m_bufsize) {
+    std::memcpy(m_buf.data(), ptr, m_bufsize);
+  }
 }
 
 std::array<std::uint8_t, 16>
@@ -505,8 +507,10 @@ LeMac::oneshot(std::span<const uint8_t> data,
 
   // write the tail into m_buf
   std::array<std::uint8_t, block_size> buf{};
-  std::size_t bufsize = data.size() - whole_blocks * block_size;
-  std::memcpy(buf.data(), data.data() + whole_blocks * block_size, bufsize);
+  const std::size_t bufsize = data.size() - whole_blocks * block_size;
+  if (bufsize) {
+    std::memcpy(buf.data(), data.data() + whole_blocks * block_size, bufsize);
+  }
 
   // let m_buf be padded
   assert(bufsize < buf.size());
