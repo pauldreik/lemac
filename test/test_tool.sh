@@ -100,7 +100,17 @@ if "$tool" --check abc.txt ; then
     echo "$me: went well, but expected the verification to fail"
     exit 1
 fi
-
+# if we remove the file, we should still get an error
+rm b
+if "$tool" --check abc.txt ; then
+    echo "$me: went well, but expected the verification to fail"
+    exit 1
+fi
+# ...but with --ignore-missing, "don't fail or report status for missing files"
+if ! "$tool" --ignore-missing --check abc.txt ; then
+    echo "$me: failed, but expected success"
+    exit 1
+fi
 
 echo "$me: all is good!"
 

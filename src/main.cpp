@@ -219,6 +219,9 @@ bool verify_checksum_from_file(const options& opt, LeMac& lemac,
     const auto actual_hash = checksum(lemac, std::string(item));
     if (actual_hash.empty()) {
       std::cout << item << ": FAILED open or read\n";
+      if (!opt.ignore_missing) {
+        retval = false;
+      }
     } else {
       if (actual_hash == expected_hash) {
         std::cout << item << ": OK\n";
