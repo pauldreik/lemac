@@ -5,8 +5,12 @@ project(lemac LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# add_compile_options(-fsanitize=address,undefined)
-# add_link_options(-fsanitize=address,undefined)
+option(LEMAC_SANITIZERS "enables sanitizers" Off)
+
+if(LEMAC_SANITIZERS)
+    add_compile_options(-fsanitize=address,undefined)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 add_compile_options(-Wall -Wextra -pedantic -Wunused)
 
@@ -24,7 +28,6 @@ add_subdirectory(benchmark/)
 add_executable(lemacsum
     src/main.cpp
 )
-
 target_link_libraries(lemacsum PRIVATE lemac)
 
 include(GNUInstallDirs)
