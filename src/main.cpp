@@ -175,6 +175,7 @@ struct options {
   // see coreutils sha256sum for explanation of these
   bool check = false;
   bool ignore_missing = false;
+  bool strict = false;
   // --tag
   bool bsd_style_checksum = false;
   std::vector<const char*> filelist;
@@ -214,6 +215,9 @@ bool verify_checksum_from_file(const options& opt, LeMac& lemac,
       line_read_ok = false;
     }
     if (!line_read_ok) {
+      if (opt.strict) {
+        retval = false;
+      }
       continue;
     }
     const auto actual_hash = checksum(lemac, std::string(item));
@@ -259,6 +263,9 @@ void parse_args(options& opt, int argc, char* argv[]) {
       opt.check = true;
     } else if ("--ignore-missing"sv == arg) {
       opt.ignore_missing = true;
+    } else if ("--strict"sv == arg) {
+      // exit non-zero for improperly formatted checksum lines
+      opt.strict = true;
     } else if ("--"sv == arg) {
       // end of options
       opt.filelist.reserve(argc - i);

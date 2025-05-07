@@ -3,7 +3,7 @@
 # verifies that the tool behaves as intended
 
 
-set -eux
+set -eu
 
 me=$(basename "$0")
 rootdir=$(dirname "$0")/..
@@ -111,6 +111,18 @@ if ! "$tool" --ignore-missing --check abc.txt ; then
     echo "$me: failed, but expected success"
     exit 1
 fi
+
+# malformed check list
+echo "019837450189735" >malformed.txt
+if ! "$tool" --check malformed.txt ; then
+    echo "$me: failed, expected it to succeed"
+    exit 1
+fi
+if "$tool" --strict --check malformed.txt ; then
+    echo "$me: succeded, expected it to fail"
+    exit 1
+fi
+
 
 echo "$me: all is good!"
 
