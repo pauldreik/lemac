@@ -76,6 +76,32 @@ ln -s hej.txt symlink
 echo "5f4aad4604ceefad43c9336d29671556  symlink" >expected.txt
 compare_files symlink.txt expected.txt
 
+# hashing something that does not work should result in fail
+echo hej>hej
+if "$tool" / hej >dir.txt; then
+    echo "$me: expected hashing a directory would fail, but it didn't"
+    exit 1
+fi
+echo "5f4aad4604ceefad43c9336d29671556  hej" >expected.txt
+compare_files dir.txt expected.txt
+
+# generate a checksum file and verify it
+echo a>a
+echo b>b
+echo c>c
+"$tool" a b c >abc.txt
+if ! "$tool" --check abc.txt ; then
+    echo "$me: expected the verification to go well"
+    exit 1
+fi
+# modify one of the files
+echo modified >> b
+if "$tool" --check abc.txt ; then
+    echo "$me: went well, but expected the verification to fail"
+    exit 1
+fi
+
+
 echo "$me: all is good!"
 
 

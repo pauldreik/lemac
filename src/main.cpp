@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -178,13 +179,64 @@ struct options {
   bool bsd_style_checksum = false;
   std::vector<const char*> filelist;
 };
-void verify_checksum_from_file(const options& opt, const char* filename) {}
+
+/// @return true on success
+bool verify_checksum_from_file(const options& opt, LeMac& lemac,
+                               const char* filename) {
+  bool retval = true;
+  std::ifstream list(filename);
+  if (!list) {
+    std::cerr << "failed opening " << filename << '\n';
+    return false;
+  }
+
+  while (list) {
+    std::string expected_hash;
+    std::string item;
+    list >> expected_hash;
+    bool line_read_ok = true;
+    if (list.eof()) {
+      // reached the end of the file
+      break;
+    }
+    if (expected_hash.size() != 32) {
+      std::cerr << "wrong size of hash " << expected_hash.size() << "\n";
+      line_read_ok = false;
+    } else if (expected_hash.find_first_not_of("0123456789abcdef") !=
+               std::string::npos) {
+      std::cerr << "wrong content of hash: \"" << expected_hash << "\"\n";
+      line_read_ok = false;
+    }
+    list.ignore(2);
+    std::getline(list, item);
+    if (list.bad()) {
+      std::cerr << "failed parsing checksum line from " << filename << '\n';
+      line_read_ok = false;
+    }
+    if (!line_read_ok) {
+      continue;
+    }
+    const auto actual_hash = checksum(lemac, std::string(item));
+    if (actual_hash.empty()) {
+      std::cout << item << ": FAILED open or read\n";
+    } else {
+      if (actual_hash == expected_hash) {
+        std::cout << item << ": OK\n";
+      } else {
+        std::cerr << "got " << actual_hash << " expected " << expected_hash
+                  << '\n';
+        std::cout << item << ": FAILED\n";
+        retval = false;
+      }
+    }
+  }
+  return retval;
+}
 
 /// @return true on success
 bool generate_checksum(const options& opt, LeMac& lemac, const char* filename) {
   auto answer = checksum(lemac, std::string(filename));
   if (answer.empty()) {
-    std::cout << " what\n";
     return false;
   } else {
     // use two spaces, just like sha256sum
@@ -247,13 +299,25 @@ int main(int argc, char* argv[]) {
 
   if (opt.check) {
     // verify checksums given on a file or stdin
+    bool bad = false;
     for (auto f : opt.filelist) {
-      verify_checksum_from_file(opt, f);
+      if (!verify_checksum_from_file(opt, lemac, f)) {
+        bad = true;
+      }
+    }
+    if (bad) {
+      std::exit(EXIT_FAILURE);
     }
   } else {
     // generate checksums
+    bool bad = false;
     for (auto f : opt.filelist) {
-      generate_checksum(opt, lemac, f);
+      if (!generate_checksum(opt, lemac, f)) {
+        bad = true;
+      }
+    }
+    if (bad) {
+      std::exit(EXIT_FAILURE);
     }
   }
 }
