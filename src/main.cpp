@@ -241,7 +241,8 @@ bool verify_checksum_from_file(const options& opt, LeMac& lemac,
 }
 
 /// @return true on success
-bool generate_checksum(const options& opt, LeMac& lemac, const char* filename) {
+bool generate_checksum([[maybe_unused]] const options& opt, LeMac& lemac,
+                       const char* filename) {
   auto answer = checksum(lemac, std::string(filename));
   if (answer.empty()) {
     return false;

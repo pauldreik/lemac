@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "configurePresets": [
+    {
+      "name": "github-workflow-vcpkg",
+      "inherits": "vcpkg",
+      "environment": {
+        "VCPKG_ROOT": "/usr/local/share/vcpkg"
+      }
+    }
+  ]
+}
