@@ -17,6 +17,7 @@ target_compile_options(lemac PRIVATE -maes -msse2)
 
 target_include_directories(lemac PUBLIC src)
 
+enable_testing()
 add_subdirectory(test)
 add_subdirectory(benchmark/)
 
