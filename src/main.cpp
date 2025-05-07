@@ -1,5 +1,7 @@
 #include <cassert>
+#include <cstring>
 #include <iostream>
+#include <vector>
 
 #include <cstdint>
 #include <stdint.h>
@@ -25,7 +27,8 @@ std::string tohex(std::span<const std::uint8_t> binary) {
 }
 
 void usage() {
-  std::cout << "checksums files passed as arguments, prints to stdout\n";
+  std::cout << "calculates or verifies lemac checksums, behaves similar to "
+               "sha256sum\n";
 }
 
 std::string run_lemac(std::span<const char> data) {
@@ -40,43 +43,217 @@ std::string run_lemac(std::span<const char> data) {
   return lemac;
 }
 
-void checksum(const std::string& filename) {
+namespace {
+// RAII for file descriptor
+struct fdcloser {
+  explicit fdcloser(int fd) : m_fd(fd) {}
 
-  // FIXME: make RAII helpers for the cleanup functions
+  // DesDeMovA to prevent copy
 
-  const int fd = open(filename.c_str(), O_RDONLY);
+  fdcloser& operator=(fdcloser&&) = delete;
 
-  // get filesize
+  ~fdcloser() { close(m_fd); }
+
+  int m_fd{-1};
+};
+
+// RAII for memory map
+struct mmapper {
+  mmapper(void* addr, size_t length) : m_addr(addr), m_len(length) {}
+
+  // DesDeMovA to prevent copy
+  mmapper& operator=(mmapper&&) = delete;
+
+  ~mmapper() { munmap((void*)m_addr, m_len); }
+
+  void* m_addr{MAP_FAILED};
+  size_t m_len{0};
+};
+} // namespace
+
+// use std::string for filename to guarantee null termination
+std::string checksum(LeMac& lemac, const std::string& filename) {
+
+  lemac.reset();
+
+  // special case "-" to mean stdin, just like sha256sum
+  const auto fd = fdcloser{filename == "-" ? dup(STDIN_FILENO)
+                                           : open(filename.c_str(), O_RDONLY)};
+
+  if (fd.m_fd == -1) {
+    std::cerr << "failed opening file " << filename << ", got error "
+              << std::strerror(errno) << '\n';
+    return {};
+  }
+
+  // get the filesize and kind
   struct stat statbuf{};
-  if (fstat(fd, &statbuf) != 0) {
-    throw std::runtime_error("failed fstat");
-  }
-  const auto filesize = statbuf.st_size;
-  // FIXME: error checking of filesize
-  const auto length = static_cast<size_t>(filesize);
-
-  const char* addr = reinterpret_cast<const char*>(mmap(
-      NULL, length, PROT_READ, MAP_FILE | MAP_PRIVATE | MAP_POPULATE, fd, 0));
-  if (addr == MAP_FAILED) {
-    throw std::runtime_error("failed mapping");
+  if (fstat(fd.m_fd, &statbuf) != 0) {
+    std::cerr << "failed fstat for file " << filename << ", got error "
+              << std::strerror(errno) << '\n';
+    return {};
   }
 
-  close(fd);
+  bool use_mmap = false;
 
-  // do the checksumming
-  const auto answer = run_lemac(std::span{addr, length});
-  std::cout << answer << "  " << filename << '\n';
+  switch (statbuf.st_mode & S_IFMT) {
+  case S_IFBLK:
+    // block device, works fine
+    break;
+  case S_IFCHR:
+    // character device, works fine. test with /dev/null or /dev/stdin
+    break;
+  case S_IFDIR:
+    std::cerr << filename << " is a directory\n";
+    return {};
+  case S_IFIFO:
+    // FIFO/pipe, works fine (test with mkfifo /tmp/pipe)
+    break;
+  case S_IFLNK:
+    // works fine, we never come here because we open with open() which resolves
+    // the symlink
+    break;
+  case S_IFREG:
+    // reqular file, only use mmap if size is strictly positive
+    use_mmap = (statbuf.st_size > 0);
+    break;
+  case S_IFSOCK:
+    // socket, won't happen, does not come past open()
+    break;
+  default:
+    std::cerr << "unknown file type " << +(statbuf.st_mode & S_IFMT) << '\n';
+    return {};
+  }
 
-  munmap((void*)addr, length);
+  if (use_mmap) {
+    assert(statbuf.st_size > 0);
+    const auto length = static_cast<size_t>(statbuf.st_size);
+
+    const auto memory_map =
+        mmapper(mmap(NULL, length, PROT_READ,
+                     MAP_FILE | MAP_PRIVATE | MAP_POPULATE, fd.m_fd, 0),
+                length);
+    if (memory_map.m_addr == MAP_FAILED) {
+
+      std::cerr << "failed memory mapping file " << filename << ", got errno "
+                << std::strerror(errno) << ", file size " << statbuf.st_size
+                << '\n';
+      return {};
+    } else {
+      const auto* addr =
+          reinterpret_cast<const std::uint8_t*>(memory_map.m_addr);
+      return tohex(lemac.oneshot(std::span{addr, length}));
+    }
+  } else if (!use_mmap) {
+    std::vector<std::uint8_t> buf(1 << 20);
+    for (;;) {
+      const auto ret = read(fd.m_fd, buf.data(), buf.size());
+      if (ret < 0) {
+        std::cerr << "failed reading from " << filename << ", got "
+                  << std::strerror(errno) << '\n';
+        return {};
+      }
+      if (ret == 0) {
+        // end of file
+        break;
+      }
+      lemac.update(std::span(buf).first(ret));
+    }
+    return tohex(lemac.finalize());
+  } else if (statbuf.st_size < 0) {
+    std::cerr << "negative filesize from stat for file " << filename << '\n';
+    return {};
+  }
+
+  std::cerr << "coming here indicates a programming error\n";
+
+  return {};
+}
+
+struct options {
+  // see coreutils sha256sum for explanation of these
+  bool check = false;
+  bool ignore_missing = false;
+  // --tag
+  bool bsd_style_checksum = false;
+  std::vector<const char*> filelist;
+};
+void verify_checksum_from_file(const options& opt, const char* filename) {}
+
+/// @return true on success
+bool generate_checksum(const options& opt, LeMac& lemac, const char* filename) {
+  auto answer = checksum(lemac, std::string(filename));
+  if (answer.empty()) {
+    std::cout << " what\n";
+    return false;
+  } else {
+    // use two spaces, just like sha256sum
+    std::cout << answer << "  " << filename << '\n';
+    return true;
+  }
+}
+
+void parse_args(options& opt, int argc, char* argv[]) {
+  for (int i = 1; i < argc; ++i) {
+    using namespace std::string_view_literals;
+    const auto arg = std::string_view(argv[i]);
+    if (arg == "-h" || arg == "--help") {
+      usage();
+      std::exit(EXIT_SUCCESS);
+    } else if ("--check"sv == arg || "-c"sv == arg) {
+      opt.check = true;
+    } else if ("--ignore-missing"sv == arg) {
+      opt.ignore_missing = true;
+    } else if ("--"sv == arg) {
+      // end of options
+      opt.filelist.reserve(argc - i);
+      for (; i < argc; ++i) {
+        opt.filelist.emplace_back(argv[i]);
+      }
+      break;
+    } else if (arg.starts_with("-") && arg.size() > 1) {
+      std::cerr << "did not understand argument " << arg << '\n';
+      std::exit(EXIT_FAILURE);
+    } else {
+      // the rest must be files!
+      opt.filelist.reserve(argc - i);
+      for (; i < argc; ++i) {
+        opt.filelist.emplace_back(argv[i]);
+      }
+      break;
+    }
+  } // for
+
+  if (!opt.check) {
+    if (opt.ignore_missing) {
+      std::cerr << "--ignore-missing can only be used in check mode\n";
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
+  // if no files were given, use stdin (both in --check mode and generation
+  // mode)
+  if (opt.filelist.empty()) {
+    opt.filelist.emplace_back("-");
+  }
 }
 
 int main(int argc, char* argv[]) {
 
-  if (argc < 2) {
-    usage();
-    std::exit(EXIT_FAILURE);
-  }
-  for (int i = 1; i < argc; ++i) {
-    checksum(std::string(argv[i]));
+  options opt;
+  parse_args(opt, argc, argv);
+
+  LeMac lemac;
+
+  if (opt.check) {
+    // verify checksums given on a file or stdin
+    for (auto f : opt.filelist) {
+      verify_checksum_from_file(opt, f);
+    }
+  } else {
+    // generate checksums
+    for (auto f : opt.filelist) {
+      generate_checksum(opt, lemac, f);
+    }
   }
 }
