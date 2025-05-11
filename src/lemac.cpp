@@ -129,8 +129,8 @@ void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
   roundkeys[10] = a;
 }
 
-void init(LeMac::LeMacContext& ctx,
-          std::span<const uint8_t, LeMac::key_size> key) {
+void init(lemac::LeMac::LeMacContext& ctx,
+          std::span<const uint8_t, lemac::key_size> key) {
   __m128i Ki[11];
   AES128_keyschedule(_mm_loadu_si128((const __m128i*)key.data()), Ki);
 
@@ -158,7 +158,7 @@ void init(LeMac::LeMacContext& ctx,
 constexpr auto vector_register_alignment = std::alignment_of_v<__m128i>;
 
 // assumes no alignment
-inline void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
+inline void process_block(lemac::LeMac::Sstate& S, lemac::LeMac::Rstate& R,
                           const std::uint8_t* ptr) noexcept {
   const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
   const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
@@ -180,7 +180,9 @@ inline void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
   R.R0 = R.RR ^ M1;
   R.RR = M2;
 }
-inline void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
+
+inline void process_aligned_block(lemac::LeMac::Sstate& S,
+                                  lemac::LeMac::Rstate& R,
                                   const __m128i* ptr) noexcept {
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
@@ -199,7 +201,8 @@ inline void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
   R.RR = *(ptr + 2);
 }
 
-inline void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
+inline void process_zero_block(lemac::LeMac::Sstate& S,
+                               lemac::LeMac::Rstate& R) noexcept {
   const __m128i M = _mm_set_epi64x(0, 0);
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], M);
@@ -218,6 +221,8 @@ inline void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
   R.RR = M;
 }
 } // namespace
+
+namespace lemac {
 
 LeMac::LeMac(std::span<const uint8_t, key_size> key) noexcept { init(key); }
 
@@ -506,3 +511,4 @@ void LeMac::tail(const LeMacContext& context, Sstate& S,
   const auto tag = AES128(std::span(context.keys[1]), T);
   _mm_storeu_si128((__m128i*)target.data(), tag);
 }
+} // namespace lemac

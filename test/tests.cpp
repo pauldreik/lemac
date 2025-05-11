@@ -48,7 +48,7 @@ std::string tohex(std::span<const std::uint8_t> binary) {
 } // namespace
 
 TEST_CASE("empty input gives correct output") {
-  LeMac lm;
+  lemac::LeMac lm;
   constexpr auto MSIZE = 0;
 
   uint8_t M[1] = {};
@@ -59,7 +59,7 @@ TEST_CASE("empty input gives correct output") {
 }
 
 TEST_CASE("update+finalize: 16 zeros input") {
-  LeMac lm;
+  lemac::LeMac lm;
   constexpr auto MSIZE = 16;
 
   uint8_t M[MSIZE] = {};
@@ -70,7 +70,7 @@ TEST_CASE("update+finalize: 16 zeros input") {
 }
 
 TEST_CASE("oneshot - 16 zeros input") {
-  LeMac lm;
+  lemac::LeMac lm;
   constexpr auto MSIZE = 16;
 
   uint8_t M[MSIZE] = {};
@@ -81,19 +81,19 @@ TEST_CASE("oneshot - 16 zeros input") {
 }
 
 TEST_CASE("oneshot - 1 zero input") {
-  LeMac lm;
+  lemac::LeMac lm;
   constexpr auto MSIZE = 1;
 
   uint8_t M[MSIZE] = {};
   lm.update(std::span(M, MSIZE));
   const auto update_and_finalize = tohex(lm.finalize());
-  const auto oneshot = tohex(LeMac{}.oneshot(std::span(M, MSIZE)));
+  const auto oneshot = tohex(lemac::LeMac{}.oneshot(std::span(M, MSIZE)));
   REQUIRE(update_and_finalize == oneshot);
 }
 
 TEST_CASE("the hasher can be reset") {
   const std::vector<std::uint8_t> data{0x20, 0x42};
-  LeMac lemac;
+  lemac::LeMac lemac;
   lemac.update(data);
   const auto first_round = lemac.finalize();
   lemac.reset();
@@ -113,27 +113,27 @@ TEST_CASE("65 byte input - iota nonces,key,input") {
   std::iota(std::begin(N), std::end(N), 0);
   std::iota(std::begin(K), std::end(K), 0);
 
-  LeMac lm(std::span(K, 16));
+  lemac::LeMac lm(std::span(K, 16));
   lm.update(std::span(M, MSIZE));
   const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
   const auto actual = tohex(lm.finalize(std::span(N, 16)));
   REQUIRE(expected == actual);
 
-  REQUIRE(tohex(LeMac{std::span(K, 16)}.oneshot(std::span(M, MSIZE),
-                                                std::span(N, 16))) == expected);
+  REQUIRE(tohex(lemac::LeMac{std::span(K, 16)}.oneshot(
+              std::span(M, MSIZE), std::span(N, 16))) == expected);
 }
 
 TEST_CASE("empty input") {
   std::vector<std::uint8_t> nodata;
   // test multiple ways
-  const auto a = LeMac{}.oneshot(nodata);
-  LeMac lemac;
+  const auto a = lemac::LeMac{}.oneshot(nodata);
+  lemac::LeMac lemac;
   lemac.update(nodata);
   const auto b = lemac.finalize();
   lemac.reset();
   lemac.update(nodata);
   const auto c = lemac.finalize();
-  const auto d = LeMac{}.finalize();
+  const auto d = lemac::LeMac{}.finalize();
 
   REQUIRE(a == b);
   REQUIRE(a == c);
@@ -151,7 +151,7 @@ TEST_CASE("partial updates") {
   std::iota(std::begin(N), std::end(N), 0);
   std::iota(std::begin(K), std::end(K), 0);
 
-  LeMac lm(std::span(K, 16));
+  lemac::LeMac lm(std::span(K, 16));
 
   auto inputdata = std::span(M, MSIZE);
   const std::size_t bytes_at_a_time = GENERATE(1u, 2u, 64u, 65u, 128u);
@@ -196,7 +196,7 @@ TEST_CASE("unaligned access") {
   std::iota(std::begin(N), std::end(N), 0);
   std::iota(std::begin(K), std::end(K), 0);
 
-  LeMac lm(K);
+  lemac::LeMac lm(K);
 
   const std::size_t bytes_at_a_time = GENERATE(1u, 2u, 64u, 65u, 128u);
   while (!inputdata.empty()) {
@@ -209,7 +209,7 @@ TEST_CASE("unaligned access") {
   const auto actual = tohex(lm.finalize(N));
   REQUIRE(expected == actual);
 
-  REQUIRE(tohex(LeMac{K}.oneshot(M.get(), N)) == expected);
+  REQUIRE(tohex(lemac::LeMac{K}.oneshot(M.get(), N)) == expected);
 }
 
 namespace {
@@ -223,7 +223,7 @@ template <std::size_t MSIZE> void benchmark() {
   std::iota(std::begin(K), std::end(K), 0);
 
   {
-    LeMac lemac(std::span(K, 16));
+    lemac::LeMac lemac(std::span(K, 16));
     BENCHMARK("C++ implementation without init") {
       lemac.reset();
       lemac.update(std::span(M));
@@ -234,7 +234,7 @@ template <std::size_t MSIZE> void benchmark() {
   }
 
   {
-    LeMac lemac(std::span(K, 16));
+    lemac::LeMac lemac(std::span(K, 16));
     BENCHMARK("C++ oneshot") {
       lemac.reset();
       const auto tmp = lemac.oneshot(std::span(M), std::span(N));
@@ -253,7 +253,7 @@ TEST_CASE("benchmark 256 kByte", "[.][benchmark]") { benchmark<256 * 1024>(); }
 
 TEST_CASE("benchmark init", "[.][benchmark]") {
   BENCHMARK("only init") {
-    LeMac l;
+    lemac::LeMac l;
     return reinterpret_cast<const char*>(&l)[0];
   };
 }

@@ -11,14 +11,16 @@
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 #endif
 
+namespace lemac::inline v1 {
+
+/// the size of the key in bytes
+static constexpr std::size_t key_size = 16;
+
 /**
  * A cryptographic hash function designed by Augustin Bariant
  */
 class LeMac {
 public:
-  /// the size of the key in bytes
-  static constexpr std::size_t key_size = 16;
-
   /**
    * constructs a hasher with a correctly sized key
    * @param key the key does not need to be aligned
@@ -133,3 +135,5 @@ private:
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
+
+} // namespace lemac::inline v1

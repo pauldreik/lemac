@@ -61,7 +61,7 @@ struct mmapper {
 } // namespace
 
 // use std::string for filename to guarantee null termination
-std::string checksum(LeMac& lemac, const std::string& filename) {
+std::string checksum(lemac::LeMac& lemac, const std::string& filename) {
 
   lemac.reset();
 
@@ -170,7 +170,7 @@ struct options {
 };
 
 /// @return true on success
-bool verify_checksum_from_file(const options& opt, LeMac& lemac,
+bool verify_checksum_from_file(const options& opt, lemac::LeMac& lemac,
                                const char* filename) {
   bool retval = true;
   std::ifstream list(filename);
@@ -229,7 +229,7 @@ bool verify_checksum_from_file(const options& opt, LeMac& lemac,
 }
 
 /// @return true on success
-bool generate_checksum([[maybe_unused]] const options& opt, LeMac& lemac,
+bool generate_checksum([[maybe_unused]] const options& opt, lemac::LeMac& lemac,
                        const char* filename) {
   auto answer = checksum(lemac, std::string(filename));
   if (answer.empty()) {
@@ -294,7 +294,7 @@ int main(int argc, char* argv[]) {
   options opt;
   parse_args(opt, argc, argv);
 
-  LeMac lemac;
+  lemac::LeMac lemac;
 
   if (opt.check) {
     // verify checksums given on a file or stdin

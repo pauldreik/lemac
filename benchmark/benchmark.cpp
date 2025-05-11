@@ -38,7 +38,7 @@ struct results {
 };
 
 results hash(const options& opt) {
-  LeMac lemac;
+  lemac::LeMac lemac;
 
   std::vector<std::uint8_t> data(opt.hashsize);
 
