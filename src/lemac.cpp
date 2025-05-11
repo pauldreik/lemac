@@ -1,108 +1,45 @@
-/* LeMac AES-NI implementation
-
-Written in 2024 by
-  Augustin Bariant <augustin.bariant@ssi.gouv.fr>
-  Gaëtan Leurent <gaetan.leurent@inria.fr>
-
-To the extent possible under law, the author(s) have dedicated all
-copyright and related and neighboring rights to this software to the
-public domain worldwide. This software is distributed without any
-warranty.
-
-You should have received a copy of the CC0 Public Domain Dedication
-along with this software. If not, see
-<http://creativecommons.org/publicdomain/zero/1.0/>.
-*/
-
-/* NOTES
- - This file implements the correct version of LeMac, fixing a mistake
-   in the message schedule in the original specification
- - Assumes that the message size is a multiple of 8bits
- - Assumes that endianness matches the hardware
+/*
+ * This is a C++ implementation of LeMac, based on the 2024 public domain
+ * implementation (CC0-1.0 license) by Augustin Bariant and Gaëtan Leurent.
+ *
+ * By Paul Dreik, https://www.pauldreik.se/
+ *
+ * https://github.com/pauldreik/lemac
+ * SPDX-License-Identifier: BSL-1.0
  */
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
-#include <immintrin.h>
 #include <stdexcept>
-#include <stdint.h>
-#include <string.h>
+
+#include <immintrin.h>
 #include <wmmintrin.h>
 
 #include "lemac.h"
 
-#define STATE_0 _mm_set_epi64x(0, 0)
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+#endif
 
-#define tabsize(T) (sizeof(T) / sizeof((T)[0]))
+namespace {
+struct compile_time_options {
+  /// clang - best with true for inputs larger than a few kB (10% faster), but
+  /// best with false for small inputs (10% faster)
+  /// gcc - faster with false
+  constexpr static inline bool oneshot_uses_tail = false;
 
-// AES key schedule from
-// https://www.intel.com/content/dam/doc/white-paper/advanced-encryption-standard-new-instructions-set-paper.pdf
+  /// gcc and clang - both are faster with false
+  constexpr static inline bool finalize_uses_tail = false;
 
-__m128i AES_128_ASSIST(__m128i temp1, __m128i temp2) {
-  __m128i temp3;
-  temp2 = _mm_shuffle_epi32(temp2, 0xff);
-  temp3 = _mm_slli_si128(temp1, 0x4);
-  temp1 = _mm_xor_si128(temp1, temp3);
-  temp3 = _mm_slli_si128(temp3, 0x4);
-  temp1 = _mm_xor_si128(temp1, temp3);
-  temp3 = _mm_slli_si128(temp3, 0x4);
-  temp1 = _mm_xor_si128(temp1, temp3);
-  temp1 = _mm_xor_si128(temp1, temp2);
-  return temp1;
-}
+  /// does not seem to be important
+  constexpr static inline bool unroll_zero_blocks = false;
 
-void AES_KS(__m128i K, __m128i* Key_Schedule) {
-  __m128i temp1, temp2;
-  temp1 = K;
-  Key_Schedule[0] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x1);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[1] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x2);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[2] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x4);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[3] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x8);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[4] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x10);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[5] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x20);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[6] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x40);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[7] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x80);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[8] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x1b);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[9] = temp1;
-  temp2 = _mm_aeskeygenassist_si128(temp1, 0x36);
-  temp1 = AES_128_ASSIST(temp1, temp2);
-  Key_Schedule[10] = temp1;
-}
+  /// does not seem to be important
+  constexpr static inline bool inline_processing = false;
+};
 
-__m128i AES(const __m128i* Ki, __m128i x) {
-  x ^= Ki[0];
-  x = _mm_aesenc_si128(x, Ki[1]);
-  x = _mm_aesenc_si128(x, Ki[2]);
-  x = _mm_aesenc_si128(x, Ki[3]);
-  x = _mm_aesenc_si128(x, Ki[4]);
-  x = _mm_aesenc_si128(x, Ki[5]);
-  x = _mm_aesenc_si128(x, Ki[6]);
-  x = _mm_aesenc_si128(x, Ki[7]);
-  x = _mm_aesenc_si128(x, Ki[8]);
-  x = _mm_aesenc_si128(x, Ki[9]);
-  x = _mm_aesenclast_si128(x, Ki[10]);
-  return x;
-}
-
-__m128i AES_modified(const __m128i* Ki, __m128i x) {
+__m128i AES128_modified(std::span<const __m128i, 11> Ki, __m128i x) {
   x ^= Ki[0];
   x = _mm_aesenc_si128(x, Ki[1]);
   x = _mm_aesenc_si128(x, Ki[2]);
@@ -117,136 +54,108 @@ __m128i AES_modified(const __m128i* Ki, __m128i x) {
   return x;
 }
 
-void lemac_init(context* ctx, const uint8_t k[]) {
-  const auto K = _mm_loadu_si128((const __m128i*)k);
+__m128i AES128(std::span<const __m128i, 11> Ki, __m128i x) {
+  assert(Ki.size() == 11);
+  x ^= Ki[0];
+  x = _mm_aesenc_si128(x, Ki[1]);
+  x = _mm_aesenc_si128(x, Ki[2]);
+  x = _mm_aesenc_si128(x, Ki[3]);
+  x = _mm_aesenc_si128(x, Ki[4]);
+  x = _mm_aesenc_si128(x, Ki[5]);
+  x = _mm_aesenc_si128(x, Ki[6]);
+  x = _mm_aesenc_si128(x, Ki[7]);
+  x = _mm_aesenc_si128(x, Ki[8]);
+  x = _mm_aesenc_si128(x, Ki[9]);
+  x = _mm_aesenclast_si128(x, Ki[10]);
+  return x;
+}
+
+// AES key schedule from
+// https://www.intel.com/content/dam/doc/white-paper/advanced-encryption-standard-new-instructions-set-paper.pdf
+void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
+
+  auto AES128_assist = [](__m128i a, __m128i b) -> __m128i {
+    b = _mm_shuffle_epi32(b, 0xff);
+    __m128i c = _mm_slli_si128(a, 0x4);
+    a ^= c;
+    c = _mm_slli_si128(c, 0x4);
+    a ^= c;
+    c = _mm_slli_si128(c, 0x4);
+    a ^= c ^ b;
+    return a;
+  };
+
+  __m128i a = K;
+  roundkeys[0] = a;
+
+  __m128i b = _mm_aeskeygenassist_si128(a, 0x1);
+  a = AES128_assist(a, b);
+  roundkeys[1] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x2);
+  a = AES128_assist(a, b);
+  roundkeys[2] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x4);
+  a = AES128_assist(a, b);
+  roundkeys[3] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x8);
+  a = AES128_assist(a, b);
+  roundkeys[4] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x10);
+  a = AES128_assist(a, b);
+  roundkeys[5] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x20);
+  a = AES128_assist(a, b);
+  roundkeys[6] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x40);
+  a = AES128_assist(a, b);
+  roundkeys[7] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x80);
+  a = AES128_assist(a, b);
+  roundkeys[8] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x1b);
+  a = AES128_assist(a, b);
+  roundkeys[9] = a;
+
+  b = _mm_aeskeygenassist_si128(a, 0x36);
+  a = AES128_assist(a, b);
+  roundkeys[10] = a;
+}
+
+void init(LeMac::LeMacContext& ctx,
+          std::span<const uint8_t, LeMac::key_size> key) {
   __m128i Ki[11];
-  AES_KS(K, Ki);
+  AES128_keyschedule(_mm_loadu_si128((const __m128i*)key.data()), Ki);
 
   // Kinit 0 --> 8
-  for (unsigned i = 0; i < tabsize(ctx->init.S); i++)
-    ctx->init.S[i] = AES(Ki, _mm_set_epi64x(0, i));
+  for (unsigned i = 0; i < std::size(ctx.init.S); ++i) {
+    ctx.init.S[i] = AES128(Ki, _mm_set_epi64x(0, i));
+  }
 
   // Kinit 9 --> 26
-  for (unsigned i = 0; i < tabsize(ctx->subkeys); i++)
-    ctx->subkeys[i] = AES(Ki, _mm_set_epi64x(0, i + tabsize(ctx->init.S)));
+  for (unsigned i = 0; i < std::size(ctx.subkeys); ++i) {
+    ctx.subkeys[i] = AES128(Ki, _mm_set_epi64x(0, i + std::size(ctx.init.S)));
+  }
 
   // k2 27
-  AES_KS(
-      AES(Ki, _mm_set_epi64x(0, tabsize(ctx->init.S) + tabsize(ctx->subkeys))),
-      ctx->keys[0]);
+  AES128_keyschedule(AES128(Ki, _mm_set_epi64x(0, std::size(ctx.init.S) +
+                                                      std::size(ctx.subkeys))),
+                     ctx.keys[0]);
 
   // k3 28
-  AES_KS(AES(Ki, _mm_set_epi64x(0, tabsize(ctx->init.S) +
-                                       tabsize(ctx->subkeys) + 1)),
-         ctx->keys[1]);
+  AES128_keyschedule(
+      AES128(Ki, _mm_set_epi64x(0, std::size(ctx.init.S) +
+                                       std::size(ctx.subkeys) + 1)),
+      ctx.keys[1]);
 }
-
-#define ROUND(S, M0, M1, M2, M3, RR, R0, R1, R2)                               \
-  do {                                                                         \
-    __m128i T = S.S[8];                                                        \
-    S.S[8] = _mm_aesenc_si128(S.S[7], M3);                                     \
-    S.S[7] = _mm_aesenc_si128(S.S[6], M1);                                     \
-    S.S[6] = _mm_aesenc_si128(S.S[5], M1);                                     \
-    S.S[5] = _mm_aesenc_si128(S.S[4], M0);                                     \
-    S.S[4] = _mm_aesenc_si128(S.S[3], M0);                                     \
-    S.S[3] = _mm_aesenc_si128(S.S[2], R1 ^ R2);                                \
-    S.S[2] = _mm_aesenc_si128(S.S[1], M3);                                     \
-    S.S[1] = _mm_aesenc_si128(S.S[0], M3);                                     \
-    S.S[0] = S.S[0] ^ T ^ M2;                                                  \
-    R2 = R1;                                                                   \
-    R1 = R0;                                                                   \
-    R0 = RR ^ M1;                                                              \
-    RR = M2;                                                                   \
-  } while (0);
-
-state lemac_AU(context* ctx, const uint8_t* m, size_t mlen) {
-  assert(m);
-  /* state S = ctx->init; */
-  // Padding
-  size_t m_padded_len = mlen - (mlen % 64) + 64;
-  uint8_t m_padding[64];
-  memcpy(m_padding, m + (mlen / 64) * 64, mlen % 64);
-  m_padding[mlen % 64] = 1;
-  __m128i* M_padding = (__m128i*)m_padding;
-  for (size_t i = 1 + (mlen % 64); i < 64; ++i) {
-    m_padding[i] = 0;
-  }
-
-  const __m128i* M = (__m128i*)m;
-  __m128i* Mfin = (__m128i*)(m + m_padded_len - 64);
-
-  state S = ctx->init;
-
-  __m128i RR = STATE_0;
-  __m128i R0 = STATE_0;
-  __m128i R1 = STATE_0;
-  __m128i R2 = STATE_0;
-  // Main rounds
-  for (; M < Mfin; M += 4) {
-    ROUND(S, M[0], M[1], M[2], M[3], RR, R0, R1, R2);
-  }
-
-  // Last round (padding)
-  ROUND(S, M_padding[0], M_padding[1], M_padding[2], M_padding[3], RR, R0, R1,
-        R2);
-
-  // Four final rounds to absorb message state
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
-  ROUND(S, STATE_0, STATE_0, STATE_0, STATE_0, RR, R0, R1, R2);
-
-  return S;
-}
-
-void lemac_MAC(context* ctx, const uint8_t* nonce, const uint8_t* m,
-               size_t mlen, uint8_t* tag) {
-  state S = lemac_AU(ctx, m, mlen);
-  const __m128i* N = (const __m128i*)nonce;
-
-  __m128i T = *N ^ AES(ctx->keys[0], *N);
-  T ^= AES_modified(ctx->subkeys, S.S[0]);
-  T ^= AES_modified(ctx->subkeys + 1, S.S[1]);
-  T ^= AES_modified(ctx->subkeys + 2, S.S[2]);
-  T ^= AES_modified(ctx->subkeys + 3, S.S[3]);
-  T ^= AES_modified(ctx->subkeys + 4, S.S[4]);
-  T ^= AES_modified(ctx->subkeys + 5, S.S[5]);
-  T ^= AES_modified(ctx->subkeys + 6, S.S[6]);
-  T ^= AES_modified(ctx->subkeys + 7, S.S[7]);
-  T ^= AES_modified(ctx->subkeys + 8, S.S[8]);
-
-  *(__m128i*)tag = AES(ctx->keys[1], T);
-}
-
-LeMac::LeMac(std::span<const uint8_t, key_size> key) { init(key); }
-
-LeMac::LeMac(std::span<const std::uint8_t> key) {
-  if (key.size() != key_size) {
-    throw std::runtime_error("wrong size of key");
-  }
-  init(key.first<key_size>());
-}
-
-void LeMac::reset() {
-  m_state.s = m_context.init;
-  m_state.r.reset();
-  m_bufsize = 0;
-}
-
-void LeMac::init(std::span<const uint8_t, key_size> key) {
-  context tmp;
-  lemac_init(&tmp, key.data());
-  std::memcpy(m_context.init.S, tmp.init.S, sizeof(Sstate));
-  std::memcpy(m_context.keys, tmp.keys, sizeof(m_context.keys));
-  std::memcpy(m_context.subkeys, tmp.subkeys, sizeof(m_context.subkeys));
-  reset();
-}
-
-namespace {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wignored-attributes"
 constexpr auto vector_register_alignment = std::alignment_of_v<__m128i>;
-#pragma GCC diagnostic pop
 
 // assumes no alignment
 inline void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
@@ -291,7 +200,7 @@ inline void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
 }
 
 inline void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
-  const __m128i M = STATE_0;
+  const __m128i M = _mm_set_epi64x(0, 0);
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], M);
   S.S[7] = _mm_aesenc_si128(S.S[6], M);
@@ -310,7 +219,27 @@ inline void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
 }
 } // namespace
 
-void LeMac::update(std::span<const uint8_t> data) {
+LeMac::LeMac(std::span<const uint8_t, key_size> key) noexcept { init(key); }
+
+LeMac::LeMac(std::span<const std::uint8_t> key) {
+  if (key.size() != key_size) {
+    throw std::runtime_error("wrong size of key");
+  }
+  init(key.first<key_size>());
+}
+
+void LeMac::reset() noexcept {
+  m_state.s = m_context.init;
+  m_state.r.reset();
+  m_bufsize = 0;
+}
+
+void LeMac::init(std::span<const uint8_t, key_size> key) noexcept {
+  ::init(m_context, key);
+  reset();
+}
+
+void LeMac::update(std::span<const uint8_t> data) noexcept {
 
   bool process_entire_m_buf = false;
   std::size_t remaining_to_full_block;
@@ -417,18 +346,18 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
     const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
     auto& S = m_state.s;
-    __m128i T = N ^ AES(m_context.keys[0], N);
-    T ^= AES_modified(m_context.subkeys, S.S[0]);
-    T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
-    T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
-    T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
-    T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
-    T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
-    T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
-    T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
-    T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
+    __m128i T = N ^ AES128(m_context.keys[0], N);
+    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
+    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
+    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
+    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
+    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
+    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
+    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
+    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
+    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
 
-    const auto tag = AES(m_context.keys[1], T);
+    const auto tag = AES128(m_context.keys[1], T);
     _mm_storeu_si128((__m128i*)target.data(), tag);
   }
 }
@@ -534,18 +463,18 @@ LeMac::oneshot(std::span<const uint8_t> data,
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
   if constexpr (!compile_time_options::oneshot_uses_tail) {
-    __m128i T = N ^ AES(m_context.keys[0], N);
-    T ^= AES_modified(m_context.subkeys, S.S[0]);
-    T ^= AES_modified(m_context.subkeys + 1, S.S[1]);
-    T ^= AES_modified(m_context.subkeys + 2, S.S[2]);
-    T ^= AES_modified(m_context.subkeys + 3, S.S[3]);
-    T ^= AES_modified(m_context.subkeys + 4, S.S[4]);
-    T ^= AES_modified(m_context.subkeys + 5, S.S[5]);
-    T ^= AES_modified(m_context.subkeys + 6, S.S[6]);
-    T ^= AES_modified(m_context.subkeys + 7, S.S[7]);
-    T ^= AES_modified(m_context.subkeys + 8, S.S[8]);
+    __m128i T = N ^ AES128(m_context.keys[0], N);
+    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
+    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
+    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
+    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
+    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
+    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
+    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
+    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
+    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
 
-    const auto tag = AES(m_context.keys[1], T);
+    const auto tag = AES128(m_context.keys[1], T);
     std::array<std::uint8_t, 16> ret;
     _mm_storeu_si128((__m128i*)ret.data(), tag);
     return ret;
@@ -563,17 +492,17 @@ void LeMac::tail(const LeMacContext& context, Sstate& S,
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  __m128i T = N ^ AES(context.keys[0], N);
-  T ^= AES_modified(context.subkeys, S.S[0]);
-  T ^= AES_modified(context.subkeys + 1, S.S[1]);
-  T ^= AES_modified(context.subkeys + 2, S.S[2]);
-  T ^= AES_modified(context.subkeys + 3, S.S[3]);
-  T ^= AES_modified(context.subkeys + 4, S.S[4]);
-  T ^= AES_modified(context.subkeys + 5, S.S[5]);
-  T ^= AES_modified(context.subkeys + 6, S.S[6]);
-  T ^= AES_modified(context.subkeys + 7, S.S[7]);
-  T ^= AES_modified(context.subkeys + 8, S.S[8]);
+  __m128i T = N ^ AES128(m_context.keys[0], N);
+  T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
+  T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
+  T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
+  T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
+  T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
+  T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
+  T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
+  T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
+  T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
 
-  const auto tag = AES(context.keys[1], T);
+  const auto tag = AES128(std::span(context.keys[1]), T);
   _mm_storeu_si128((__m128i*)target.data(), tag);
 }

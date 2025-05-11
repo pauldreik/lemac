@@ -91,17 +91,6 @@ auto get_compiler() {
 #endif
 }
 
-void print_config() {
-  fmt::println(" oneshot uses tail: {}",
-               LeMac::compile_time_options::oneshot_uses_tail);
-  fmt::println("finalize uses tail: {}",
-               LeMac::compile_time_options::finalize_uses_tail);
-  fmt::println("unroll zero blocks: {}",
-               LeMac::compile_time_options::unroll_zero_blocks);
-  fmt::println(" inline processing: {}",
-               LeMac::compile_time_options::inline_processing);
-}
-
 void run_all() {
   options opt{};
   for (auto strat : {Strategy::update_and_finalize, Strategy::oneshot}) {
@@ -115,6 +104,5 @@ void run_all() {
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   fmt::println("compiler: {}", get_compiler());
-  print_config();
   run_all();
 }

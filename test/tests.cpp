@@ -1,11 +1,7 @@
-
 #include <cassert>
-#include <iostream>
+#include <cstdint>
 #include <numeric>
 #include <span>
-
-#include <cstdint>
-#include <stdint.h>
 
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -51,29 +47,7 @@ std::string tohex(std::span<const std::uint8_t> binary) {
 }
 } // namespace
 
-TEST_CASE("recreate test vector with zero nonce, key and empty input") {
-  constexpr auto MSIZE = 0;
-
-  uint8_t M[1] = {};
-  uint8_t N[16] = {};
-  uint8_t K[16] = {};
-  uint8_t T[16] = {};
-
-  context ctx;
-  lemac_init(&ctx, K);
-
-  // Blank computation
-  lemac_MAC(&ctx, N, M, MSIZE, T);
-  std::cout << "Key=" << tohex(std::span(K, sizeof(K))) << '\n';
-  std::cout << "Nonce=" << tohex(std::span(N, sizeof(N))) << '\n';
-  std::cout << "Message=" << MSIZE << " zeros\n";
-  const auto lemac = tohex(std::span(T, sizeof(T)));
-  std::cout << "LeMac=" << lemac << '\n';
-  const std::string expected = "52282e853c9cfeb5537d33fb916a341f";
-  REQUIRE(expected == lemac);
-}
-
-TEST_CASE("alternate api - empty input") {
+TEST_CASE("empty input gives correct output") {
   LeMac lm;
   constexpr auto MSIZE = 0;
 
@@ -84,29 +58,7 @@ TEST_CASE("alternate api - empty input") {
   REQUIRE(expected == actual);
 }
 
-TEST_CASE("recreate test vector with zero nonce, key and 16 zeros as input") {
-  constexpr auto MSIZE = 16;
-
-  uint8_t M[MSIZE] = {};
-  uint8_t N[16] = {};
-  uint8_t K[16] = {};
-  uint8_t T[16] = {};
-
-  context ctx;
-  lemac_init(&ctx, K);
-
-  // Blank computation
-  lemac_MAC(&ctx, N, M, MSIZE, T);
-  std::cout << "Key=" << tohex(std::span(K, sizeof(K))) << '\n';
-  std::cout << "Nonce=" << tohex(std::span(N, sizeof(N))) << '\n';
-  std::cout << "Message=" << MSIZE << " zeros\n";
-  const auto lemac = tohex(std::span(T, sizeof(T)));
-  std::cout << "LeMac=" << lemac << '\n';
-  const std::string expected = "26fa471b77facc73ec2f9b50bb1af864";
-  REQUIRE(expected == lemac);
-}
-
-TEST_CASE("alternate api - 16 zeros input") {
+TEST_CASE("update+finalize: 16 zeros input") {
   LeMac lm;
   constexpr auto MSIZE = 16;
 
@@ -150,33 +102,7 @@ TEST_CASE("the hasher can be reset") {
   REQUIRE(first_round == second_round);
 }
 
-TEST_CASE("recreate test vector with iota nonce, key and input") {
-  constexpr auto MSIZE = 65;
-
-  uint8_t M[MSIZE] = {};
-  uint8_t N[16] = {};
-  uint8_t K[16] = {};
-  uint8_t T[16] = {};
-
-  std::iota(std::begin(M), std::end(M), 0);
-  std::iota(std::begin(N), std::end(N), 0);
-  std::iota(std::begin(K), std::end(K), 0);
-
-  context ctx;
-  lemac_init(&ctx, K);
-
-  // Blank computation
-  lemac_MAC(&ctx, N, M, MSIZE, T);
-  std::cout << "Key=" << tohex(std::span(K, sizeof(K))) << '\n';
-  std::cout << "Nonce=" << tohex(std::span(N, sizeof(N))) << '\n';
-  std::cout << "Message=std::iota(" << MSIZE << ")\n";
-  const auto lemac = tohex(std::span(T, sizeof(T)));
-  std::cout << "LeMac=" << lemac << '\n';
-  const std::string expected = "d58dfdbe8b0224e1d5106ac4d775beef";
-  REQUIRE(expected == lemac);
-}
-
-TEST_CASE("alternate api - iota nonces,key,input") {
+TEST_CASE("65 byte input - iota nonces,key,input") {
   constexpr auto MSIZE = 65;
 
   uint8_t M[MSIZE] = {};
@@ -228,7 +154,7 @@ TEST_CASE("partial updates") {
   LeMac lm(std::span(K, 16));
 
   auto inputdata = std::span(M, MSIZE);
-  const auto bytes_at_a_time = GENERATE(1uz, 2uz, 64uz, 65uz, 128uz);
+  const std::size_t bytes_at_a_time = GENERATE(1u, 2u, 64u, 65u, 128u);
   while (!inputdata.empty()) {
     const auto consumed = std::min(bytes_at_a_time, inputdata.size());
     lm.update(inputdata.first(consumed));
@@ -256,7 +182,7 @@ private:
 TEST_CASE("unaligned access") {
   constexpr auto MSIZE = 65;
 
-  const auto alignment = GENERATE(0uz, 1uz, 2uz, 15uz);
+  const std::size_t alignment = GENERATE(0u, 1u, 2u, 15u);
 
   auto M = unaligned_buf(alignment, MSIZE);
   auto inputdata = M.get();
@@ -272,7 +198,7 @@ TEST_CASE("unaligned access") {
 
   LeMac lm(K);
 
-  const auto bytes_at_a_time = GENERATE(1uz, 2uz, 64uz, 65uz, 128uz);
+  const std::size_t bytes_at_a_time = GENERATE(1u, 2u, 64u, 65u, 128u);
   while (!inputdata.empty()) {
     const auto consumed = std::min(bytes_at_a_time, inputdata.size());
     lm.update(inputdata.first(consumed));
@@ -288,12 +214,9 @@ TEST_CASE("unaligned access") {
 
 namespace {
 template <std::size_t MSIZE> void benchmark() {
-  // 5 µs * ~4 GHz / 256 kB = 0.078 cycles/byte on zen 4(claimed in paper on
-  // zen3: 0.072)
   uint8_t M[MSIZE] = {};
   uint8_t N[16] = {};
   uint8_t K[16] = {};
-  uint8_t T[16] = {};
 
   std::iota(std::begin(M), std::end(M), 0);
   std::iota(std::begin(N), std::end(N), 0);
@@ -313,20 +236,10 @@ template <std::size_t MSIZE> void benchmark() {
   {
     LeMac lemac(std::span(K, 16));
     BENCHMARK("C++ oneshot") {
-      // lemac.reset();
+      lemac.reset();
       const auto tmp = lemac.oneshot(std::span(M), std::span(N));
       M[0] = tmp[0];
       return tmp[0];
-    };
-  }
-
-  {
-    context ctx;
-    lemac_init(&ctx, K);
-    BENCHMARK("original implementation without init") {
-      lemac_MAC(&ctx, N, M, MSIZE, T);
-      M[0] = T[0];
-      return T[0];
     };
   }
 }
@@ -337,3 +250,10 @@ TEST_CASE("benchmark 4 kByte", "[.][benchmark]") { benchmark<4 * 1024>(); }
 TEST_CASE("benchmark 16 kByte", "[.][benchmark]") { benchmark<16 * 1024>(); }
 TEST_CASE("benchmark 64 kByte", "[.][benchmark]") { benchmark<64 * 1024>(); }
 TEST_CASE("benchmark 256 kByte", "[.][benchmark]") { benchmark<256 * 1024>(); }
+
+TEST_CASE("benchmark init", "[.][benchmark]") {
+  BENCHMARK("only init") {
+    LeMac l;
+    return reinterpret_cast<const char*>(&l)[0];
+  };
+}

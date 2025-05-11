@@ -32,18 +32,6 @@ void usage() {
                "sha256sum\n";
 }
 
-std::string run_lemac(std::span<const char> data) {
-  uint8_t N[16] = {};
-  uint8_t K[16] = {};
-  uint8_t T[16] = {};
-
-  context ctx;
-  lemac_init(&ctx, K);
-  lemac_MAC(&ctx, N, (const uint8_t*)data.data(), data.size(), T);
-  const auto lemac = tohex(std::span(T, sizeof(T)));
-  return lemac;
-}
-
 namespace {
 // RAII for file descriptor
 struct fdcloser {
