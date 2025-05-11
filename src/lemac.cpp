@@ -40,7 +40,8 @@ struct compile_time_options {
 };
 
 __m128i AES128_modified(std::span<const __m128i, 11> Ki, __m128i x) {
-  x ^= Ki[0];
+  // x ^= Ki[0];
+  x = _mm_xor_si128(x, Ki[0]);
   x = _mm_aesenc_si128(x, Ki[1]);
   x = _mm_aesenc_si128(x, Ki[2]);
   x = _mm_aesenc_si128(x, Ki[3]);
@@ -56,7 +57,8 @@ __m128i AES128_modified(std::span<const __m128i, 11> Ki, __m128i x) {
 
 __m128i AES128(std::span<const __m128i, 11> Ki, __m128i x) {
   assert(Ki.size() == 11);
-  x ^= Ki[0];
+  // x ^= Ki[0];
+  x = _mm_xor_si128(x, Ki[0]);
   x = _mm_aesenc_si128(x, Ki[1]);
   x = _mm_aesenc_si128(x, Ki[2]);
   x = _mm_aesenc_si128(x, Ki[3]);
@@ -77,11 +79,12 @@ void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
   auto AES128_assist = [](__m128i a, __m128i b) -> __m128i {
     b = _mm_shuffle_epi32(b, 0xff);
     __m128i c = _mm_slli_si128(a, 0x4);
-    a ^= c;
+    a = _mm_xor_si128(a, c);
     c = _mm_slli_si128(c, 0x4);
-    a ^= c;
+    a = _mm_xor_si128(a, c);
     c = _mm_slli_si128(c, 0x4);
-    a ^= c ^ b;
+    a = _mm_xor_si128(a, c);
+    a = _mm_xor_si128(a, b);
     return a;
   };
 
@@ -171,13 +174,13 @@ inline void process_block(LeMac::Sstate& S, LeMac::Rstate& R,
   S.S[5] = _mm_aesenc_si128(S.S[4], M0);
 
   S.S[4] = _mm_aesenc_si128(S.S[3], M0);
-  S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+  S.S[3] = _mm_aesenc_si128(S.S[2], _mm_xor_si128(R.R1, R.R2));
   S.S[2] = _mm_aesenc_si128(S.S[1], M3);
   S.S[1] = _mm_aesenc_si128(S.S[0], M3);
-  S.S[0] = S.S[0] ^ T ^ M2;
+  S.S[0] = _mm_xor_si128(_mm_xor_si128(S.S[0], T), M2);
   R.R2 = R.R1;
   R.R1 = R.R0;
-  R.R0 = R.RR ^ M1;
+  R.R0 = _mm_xor_si128(R.RR, M1);
   R.RR = M2;
 }
 inline void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
@@ -189,13 +192,13 @@ inline void process_aligned_block(LeMac::Sstate& S, LeMac::Rstate& R,
   S.S[5] = _mm_aesenc_si128(S.S[4], *(ptr + 0));
 
   S.S[4] = _mm_aesenc_si128(S.S[3], *(ptr + 0));
-  S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+  S.S[3] = _mm_aesenc_si128(S.S[2], _mm_xor_si128(R.R1, R.R2));
   S.S[2] = _mm_aesenc_si128(S.S[1], *(ptr + 3));
   S.S[1] = _mm_aesenc_si128(S.S[0], *(ptr + 3));
-  S.S[0] = S.S[0] ^ T ^ *(ptr + 2);
+  S.S[0] = _mm_xor_si128(_mm_xor_si128(S.S[0], T), *(ptr + 2));
   R.R2 = R.R1;
   R.R1 = R.R0;
-  R.R0 = R.RR ^ *(ptr + 1);
+  R.R0 = _mm_xor_si128(R.RR, *(ptr + 1));
   R.RR = *(ptr + 2);
 }
 
@@ -208,10 +211,11 @@ inline void process_zero_block(LeMac::Sstate& S, LeMac::Rstate& R) noexcept {
   S.S[5] = _mm_aesenc_si128(S.S[4], M);
 
   S.S[4] = _mm_aesenc_si128(S.S[3], M);
-  S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+  S.S[3] = _mm_aesenc_si128(S.S[2], _mm_xor_si128(R.R1, R.R2));
   S.S[2] = _mm_aesenc_si128(S.S[1], M);
   S.S[1] = _mm_aesenc_si128(S.S[0], M);
-  S.S[0] = S.S[0] ^ T /*^ M2*/;
+  S.S[0] = _mm_xor_si128(S.S[0], T); /*^ M2*/
+  ;
   R.R2 = R.R1;
   R.R1 = R.R0;
   R.R0 = R.RR /*^ M1*/;
@@ -346,16 +350,16 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
     const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
     auto& S = m_state.s;
-    __m128i T = N ^ AES128(m_context.keys[0], N);
-    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+    __m128i T = _mm_xor_si128(N, AES128(m_context.keys[0], N));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<0>(), S.S[0]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<1>(), S.S[1]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<2>(), S.S[2]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<3>(), S.S[3]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<4>(), S.S[4]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<5>(), S.S[5]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<6>(), S.S[6]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<7>(), S.S[7]));
+    T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<8>(), S.S[8]));
 
     const auto tag = AES128(m_context.keys[1], T);
     _mm_storeu_si128((__m128i*)target.data(), tag);
@@ -384,21 +388,7 @@ LeMac::oneshot(std::span<const uint8_t> data,
       const auto block_end = ptr + whole_blocks * step;
       for (; ptr != block_end; ptr += step) {
         if constexpr (compile_time_options::inline_processing) {
-          __m128i T = S.S[8];
-          S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
-          S.S[7] = _mm_aesenc_si128(S.S[6], *(ptr + 1));
-          S.S[6] = _mm_aesenc_si128(S.S[5], *(ptr + 1));
-          S.S[5] = _mm_aesenc_si128(S.S[4], *(ptr + 0));
-
-          S.S[4] = _mm_aesenc_si128(S.S[3], *(ptr + 0));
-          S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
-          S.S[2] = _mm_aesenc_si128(S.S[1], *(ptr + 3));
-          S.S[1] = _mm_aesenc_si128(S.S[0], *(ptr + 3));
-          S.S[0] = S.S[0] ^ T ^ *(ptr + 2);
-          R.R2 = R.R1;
-          R.R1 = R.R0;
-          R.R0 = R.RR ^ *(ptr + 1);
-          R.RR = *(ptr + 2);
+          // not available
         } else {
           process_aligned_block(S, R, ptr);
         }
@@ -408,25 +398,7 @@ LeMac::oneshot(std::span<const uint8_t> data,
       auto ptr = data.data();
       for (; ptr != block_end; ptr += block_size) {
         if constexpr (compile_time_options::inline_processing) {
-          const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
-          const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
-          const auto M2 = _mm_loadu_si128((const __m128i*)(ptr + 32));
-          const auto M3 = _mm_loadu_si128((const __m128i*)(ptr + 48));
-          __m128i T = S.S[8];
-          S.S[8] = _mm_aesenc_si128(S.S[7], M3);
-          S.S[7] = _mm_aesenc_si128(S.S[6], M1);
-          S.S[6] = _mm_aesenc_si128(S.S[5], M1);
-          S.S[5] = _mm_aesenc_si128(S.S[4], M0);
-
-          S.S[4] = _mm_aesenc_si128(S.S[3], M0);
-          S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
-          S.S[2] = _mm_aesenc_si128(S.S[1], M3);
-          S.S[1] = _mm_aesenc_si128(S.S[0], M3);
-          S.S[0] = S.S[0] ^ T ^ M2;
-          R.R2 = R.R1;
-          R.R1 = R.R0;
-          R.R0 = R.RR ^ M1;
-          R.RR = M2;
+          // not available
         } else {
           process_block(S, R, ptr);
         }
@@ -462,27 +434,9 @@ LeMac::oneshot(std::span<const uint8_t> data,
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  if constexpr (!compile_time_options::oneshot_uses_tail) {
-    __m128i T = N ^ AES128(m_context.keys[0], N);
-    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
-
-    const auto tag = AES128(m_context.keys[1], T);
-    std::array<std::uint8_t, 16> ret;
-    _mm_storeu_si128((__m128i*)ret.data(), tag);
-    return ret;
-  } else {
-    std::array<std::uint8_t, 16> ret;
-    tail(m_context, S, nonce, ret);
-    return ret;
-  }
+  std::array<std::uint8_t, 16> ret;
+  tail(m_context, S, nonce, ret);
+  return ret;
 }
 
 void LeMac::tail(const LeMacContext& context, Sstate& S,
@@ -492,16 +446,16 @@ void LeMac::tail(const LeMacContext& context, Sstate& S,
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-  __m128i T = N ^ AES128(m_context.keys[0], N);
-  T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-  T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-  T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-  T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-  T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-  T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-  T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-  T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-  T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+  __m128i T = _mm_xor_si128(N, AES128(m_context.keys[0], N));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<0>(), S.S[0]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<1>(), S.S[1]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<2>(), S.S[2]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<3>(), S.S[3]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<4>(), S.S[4]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<5>(), S.S[5]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<6>(), S.S[6]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<7>(), S.S[7]));
+  T = _mm_xor_si128(T, AES128_modified(m_context.get_subkey<8>(), S.S[8]));
 
   const auto tag = AES128(std::span(context.keys[1]), T);
   _mm_storeu_si128((__m128i*)target.data(), tag);
