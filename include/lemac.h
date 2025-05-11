@@ -19,22 +19,18 @@ static constexpr std::size_t key_size = 16;
 /**
  * A cryptographic hash function designed by Augustin Bariant
  */
-class LeMac {
+class LeMac final {
 public:
   /**
-   * constructs a hasher with a correctly sized key
-   * @param key the key does not need to be aligned
+   * constructs a hasher with a zero key
    */
-  explicit LeMac(std::span<const std::uint8_t, key_size> key = std::span{
-                     zero_key}) noexcept;
+  LeMac() noexcept;
 
   /**
    * constructs a hasher with a correctly sized key, verified at runtime.
-   * If the size of the key is statically known to be correct, use the other
-   * constructor.
    *
    * @param key the key does not need to be aligned, but it must have the
-   * correct size. if not, an exception is thrown.
+   * correct size (lemac::key_size). if not, an exception is thrown.
    */
   explicit LeMac(std::span<const std::uint8_t> key);
 
@@ -50,12 +46,26 @@ public:
   void update(std::span<const std::uint8_t> data) noexcept;
 
   /**
+   * finalizes the hash with a zero nonce and returns the result
+   * @return
+   */
+  std::array<std::uint8_t, 16> finalize() noexcept;
+
+  /**
    * finalizes the hash and returns the result
    * @param nonce does not need to be aligned
    * @return
    */
-  std::array<std::uint8_t, 16>
-  finalize(std::span<const std::uint8_t> nonce = std::span{zero_key});
+  std::array<std::uint8_t, 16> finalize(std::span<const std::uint8_t> nonce);
+
+  /**
+   * finalizes the hash and writes the result into the provided target, using a
+   * zero nonce.
+   * @param target does not need to be aligned
+   */
+  void finalize_to(std::span<std::uint8_t, 16> target) noexcept {
+    finalize_to(zeros, target);
+  }
 
   /**
    * finalizes the hash and writes the result into the provided target
@@ -66,17 +76,30 @@ public:
                    std::span<std::uint8_t, 16> target) noexcept;
 
   /**
-   * hashes with the provided data and then finalizes the hash.
-   * this is more efficient than update()+finalize() and should be preferred
-   * when all data is known upfront.
+   * hashes with the provided data and then finalizes the hash, using a zero
+   * nonce. this is more efficient than update()+finalize() and should be
+   * preferred when all data is known upfront.
+   *
+   * @param data does not need to be aligned
+   * @return the lemac hash
+   */
+  std::array<std::uint8_t, 16>
+  oneshot(std::span<const std::uint8_t> data) const noexcept {
+    return oneshot(data, zeros);
+  }
+
+  /**
+   * hashes with the provided data and then finalizes the hash with the given
+   * nonce. this is more efficient than update()+finalize() and should be
+   * preferred when all data is known upfront.
    *
    * @param data does not need to be aligned
    * @param nonce does not need to be aligned
-   * @return
+   * @return the lemac hash
    */
-  std::array<std::uint8_t, 16> oneshot(
-      std::span<const std::uint8_t> data,
-      std::span<const std::uint8_t> nonce = std::span{zero_key}) const noexcept;
+  std::array<std::uint8_t, 16>
+  oneshot(std::span<const std::uint8_t> data,
+          std::span<const std::uint8_t> nonce) const noexcept;
 
   /**
    * resets the object as if it had been newly constructed. this is more
@@ -84,7 +107,8 @@ public:
    */
   void reset() noexcept;
 
-  static constexpr std::array<const std::uint8_t, key_size> zero_key{};
+  /// zeros which can be used as a key or a nonce
+  static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
   struct Sstate {
     __m128i S[9];

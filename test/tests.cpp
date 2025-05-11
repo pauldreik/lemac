@@ -212,6 +212,38 @@ TEST_CASE("unaligned access") {
   REQUIRE(tohex(lemac::LeMac{K}.oneshot(M.get(), N)) == expected);
 }
 
+TEST_CASE("hash can be copied and moved") {
+  const std::array<std::uint8_t, 16> key{1, 2, 3};
+  const std::array<std::uint8_t, 16> nonce_a{4, 5, 6};
+  const std::array<std::uint8_t, 16> nonce_b{7, 8, 9};
+  const std::array<std::uint8_t, 123> data_a{'a'};
+  const std::array<std::uint8_t, 123> data_b{'b'};
+
+  lemac::LeMac original(key);
+  const auto aa = original.oneshot(data_a, nonce_a);
+  const auto ab = original.oneshot(data_a, nonce_b);
+  const auto ba = original.oneshot(data_b, nonce_a);
+  const auto bb = original.oneshot(data_b, nonce_b);
+  REQUIRE(aa != ab);
+  REQUIRE(aa != ba);
+  REQUIRE(aa != bb);
+  {
+    // make a copy and update them with different data
+    auto copy = original;
+    original.update(data_a);
+    copy.update(data_b);
+    const auto actual = original.finalize(nonce_a);
+    REQUIRE(actual == aa);
+    REQUIRE(ba == copy.finalize(nonce_a));
+  }
+  {
+    // move the original and make sure the moved to object behaves identical
+    lemac::LeMac moved_to;
+    moved_to = std::move(original);
+    REQUIRE(bb == moved_to.oneshot(data_b, nonce_b));
+  }
+}
+
 namespace {
 template <std::size_t MSIZE> void benchmark() {
   uint8_t M[MSIZE] = {};

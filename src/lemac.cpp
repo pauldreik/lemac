@@ -224,7 +224,7 @@ inline void process_zero_block(lemac::LeMac::Sstate& S,
 
 namespace lemac {
 
-LeMac::LeMac(std::span<const uint8_t, key_size> key) noexcept { init(key); }
+LeMac::LeMac() noexcept { init(zeros); }
 
 LeMac::LeMac(std::span<const std::uint8_t> key) {
   if (key.size() != key_size) {
@@ -305,6 +305,12 @@ void LeMac::update(std::span<const uint8_t> data) noexcept {
   if (m_bufsize) {
     std::memcpy(m_buf.data(), ptr, m_bufsize);
   }
+}
+
+std::array<std::uint8_t, 16> LeMac::finalize() noexcept {
+  std::array<std::uint8_t, 16> ret;
+  finalize_to(zeros, ret);
+  return ret;
 }
 
 std::array<std::uint8_t, 16>
