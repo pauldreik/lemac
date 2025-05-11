@@ -1,7 +1,7 @@
 #include <chrono>
 #include <vector>
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <lemac.h>
 
@@ -88,6 +88,10 @@ auto get_compiler() {
   return "clang";
 #elif defined(__GNUC__)
   return "gcc";
+#elif defined(_MSC_VER)
+  return "msvc";
+#else
+  return "unknown";
 #endif
 }
 

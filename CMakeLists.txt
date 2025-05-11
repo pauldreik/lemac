@@ -20,7 +20,7 @@ target_link_libraries(lemac PUBLIC lemac_compiler_warnings)
 
 target_compile_options(
   lemac PUBLIC "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-maes;-msse2>>"
-               "$<${msvc_cxx}:$<BUILD_INTERFACE:??????>>")
+               "$<${msvc_cxx}:$<BUILD_INTERFACE:/arch:SSE2>>")
 
 if(PROJECT_IS_TOP_LEVEL)
   option(LEMAC_SANITIZERS "enables sanitizers" Off)
