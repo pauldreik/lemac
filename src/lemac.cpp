@@ -246,22 +246,40 @@ void tail(const lemac::detail::LeMacContext& context, lemac::detail::Sstate& S,
 
 namespace lemac {
 
-LeMac::LeMac() noexcept {
-  ::init(m_context, zeros);
+LeMac::LeMac() noexcept : m_impl(std::make_unique<detail::AESNI>()) {
+  ::init(m_impl->m_context, zeros);
   reset();
 }
 
-LeMac::LeMac(std::span<const std::uint8_t> key) {
+LeMac::LeMac(std::span<const std::uint8_t> key)
+    : m_impl(std::make_unique<detail::AESNI>()) {
   if (key.size() != key_size) {
     throw std::runtime_error("wrong size of key");
   }
-  ::init(m_context, key.first<key_size>());
+  ::init(m_impl->m_context, key.first<key_size>());
   reset();
 }
 
+LeMac::LeMac(const LeMac& other) noexcept
+    : m_impl(std::make_unique<detail::AESNI>(*other.m_impl)) {}
+
+LeMac::LeMac(LeMac&& other) noexcept : m_impl(std::move(other.m_impl)) {}
+
+LeMac& LeMac::operator=(LeMac&& other) noexcept {
+  m_impl = std::move(other.m_impl);
+  return *this;
+}
+
+LeMac::~LeMac() noexcept = default;
+
+LeMac& LeMac::operator=(const LeMac& other) noexcept {
+  *m_impl = *other.m_impl;
+  return *this;
+}
+
 void LeMac::reset() noexcept {
-  m_state.s = m_context.init;
-  m_state.r.reset();
+  m_impl->m_state.s = m_impl->m_context.init;
+  m_impl->m_state.r.reset();
   m_bufsize = 0;
 }
 
@@ -286,7 +304,7 @@ void LeMac::update(std::span<const uint8_t> data) noexcept {
 
   // operate on a copy of the state and write it back later, this is 2.5x
   // faster than operating on m_state directly
-  auto state = m_state;
+  auto state = m_impl->m_state;
 
   if (process_entire_m_buf) {
     // process the entire block
@@ -319,7 +337,7 @@ void LeMac::update(std::span<const uint8_t> data) noexcept {
       process_block(state.s, state.r, ptr);
     }
   }
-  m_state = state;
+  m_impl->m_state = state;
 
   // write the tail into m_buf
   m_bufsize = data.size() - whole_blocks * block_size;
@@ -353,43 +371,44 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
   const bool buf_is_aligned = (reinterpret_cast<std::uintptr_t>(m_buf.data()) %
                                vector_register_alignment) == 0;
   if (buf_is_aligned) {
-    process_aligned_block(m_state.s, m_state.r, (const __m128i*)m_buf.data());
+    process_aligned_block(m_impl->m_state.s, m_impl->m_state.r,
+                          (const __m128i*)m_buf.data());
   } else {
-    process_block(m_state.s, m_state.r, m_buf.data());
+    process_block(m_impl->m_state.s, m_impl->m_state.r, m_buf.data());
   }
 
   // Four final rounds to absorb message state
   if constexpr (compile_time_options::unroll_zero_blocks) {
-    process_zero_block(m_state.s, m_state.r);
-    process_zero_block(m_state.s, m_state.r);
-    process_zero_block(m_state.s, m_state.r);
-    process_zero_block(m_state.s, m_state.r);
+    process_zero_block(m_impl->m_state.s, m_impl->m_state.r);
+    process_zero_block(m_impl->m_state.s, m_impl->m_state.r);
+    process_zero_block(m_impl->m_state.s, m_impl->m_state.r);
+    process_zero_block(m_impl->m_state.s, m_impl->m_state.r);
   } else {
     for (int i = 0; i < 4; ++i) {
-      process_zero_block(m_state.s, m_state.r);
+      process_zero_block(m_impl->m_state.s, m_impl->m_state.r);
     }
   }
 
   if constexpr (compile_time_options::finalize_uses_tail) {
-    tail(m_context, m_state.s, nonce, target);
+    tail(m_impl->m_context, m_impl->m_state.s, nonce, target);
   } else {
     assert(nonce.size() == 16);
 
     const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
-    auto& S = m_state.s;
-    __m128i T = N ^ AES128(m_context.keys[0], N);
-    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+    auto& S = m_impl->m_state.s;
+    __m128i T = N ^ AES128(m_impl->m_context.keys[0], N);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<0>(), S.S[0]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<1>(), S.S[1]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<2>(), S.S[2]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<3>(), S.S[3]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<4>(), S.S[4]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<5>(), S.S[5]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<6>(), S.S[6]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<7>(), S.S[7]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<8>(), S.S[8]);
 
-    const auto tag = AES128(m_context.keys[1], T);
+    const auto tag = AES128(m_impl->m_context.keys[1], T);
     _mm_storeu_si128((__m128i*)target.data(), tag);
   }
 }
@@ -400,7 +419,7 @@ std::array<uint8_t, 16>
 LeMac::oneshot(std::span<const uint8_t> data,
                std::span<const uint8_t> nonce) const noexcept {
 
-  detail::Sstate S = m_context.init;
+  detail::Sstate S = m_impl->m_context.init;
   detail::Rstate R{};
 
   // process whole blocks
@@ -495,24 +514,24 @@ LeMac::oneshot(std::span<const uint8_t> data,
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
   if constexpr (!compile_time_options::oneshot_uses_tail) {
-    __m128i T = N ^ AES128(m_context.keys[0], N);
-    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+    __m128i T = N ^ AES128(m_impl->m_context.keys[0], N);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<0>(), S.S[0]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<1>(), S.S[1]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<2>(), S.S[2]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<3>(), S.S[3]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<4>(), S.S[4]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<5>(), S.S[5]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<6>(), S.S[6]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<7>(), S.S[7]);
+    T ^= AES128_modified(m_impl->m_context.get_subkey<8>(), S.S[8]);
 
-    const auto tag = AES128(m_context.keys[1], T);
+    const auto tag = AES128(m_impl->m_context.keys[1], T);
     std::array<std::uint8_t, 16> ret;
     _mm_storeu_si128((__m128i*)ret.data(), tag);
     return ret;
   } else {
     std::array<std::uint8_t, 16> ret;
-    tail(m_context, S, nonce, ret);
+    tail(m_impl->m_context, S, nonce, ret);
     return ret;
   }
 }

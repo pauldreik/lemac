@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <span>
 
 #include <immintrin.h>
@@ -47,6 +48,12 @@ struct LeMacContext {
     return std::span<const __m128i, 11>(subkeys + i, 11);
   }
 };
+
+struct AESNI {
+  detail::LeMacContext m_context;
+  detail::ComboState m_state;
+};
+
 } // namespace detail
 
 /**
@@ -66,6 +73,12 @@ public:
    * correct size (lemac::key_size). if not, an exception is thrown.
    */
   explicit LeMac(std::span<const std::uint8_t> key);
+
+  LeMac(const LeMac& other) noexcept;
+  LeMac(LeMac&& other) noexcept;
+  LeMac& operator=(const LeMac& other) noexcept;
+  LeMac& operator=(LeMac&& other) noexcept;
+  ~LeMac() noexcept;
 
   /**
    * updates the hash with the provided data. this may be called zero or more
@@ -146,8 +159,7 @@ public:
 private:
   static constexpr std::size_t block_size = 64;
 
-  detail::LeMacContext m_context;
-  detail::ComboState m_state;
+  std::unique_ptr<detail::AESNI> m_impl;
   /// this is a buffer that keeps data between update() invocations,
   /// in case data is provided in sizes not evenly divisible by the block size
   std::array<std::uint8_t, block_size> m_buf{};
