@@ -153,10 +153,10 @@ public:
    */
   void reset() noexcept;
 
+private:
   /// zeros which can be used as a key or a nonce
   static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
-private:
   static constexpr std::size_t block_size = 64;
 
   std::unique_ptr<detail::AESNI> m_impl;
