@@ -29,6 +29,24 @@ struct Rstate {
   __m128i R2;
 };
 
+// this is the state that changes during absorption of data
+struct ComboState {
+  Sstate s;
+  Rstate r;
+};
+
+// this is inited on lemac construction and not changed after
+struct LeMacContext {
+  Sstate init;
+  __m128i keys[2][11];
+  __m128i subkeys[18];
+
+  template <std::size_t i>
+    requires(i >= 0 && i <= 8)
+  std::span<const __m128i, 11> get_subkey() const {
+    return std::span<const __m128i, 11>(subkeys + i, 11);
+  }
+};
 } // namespace detail
 
 /**
@@ -125,34 +143,15 @@ public:
   /// zeros which can be used as a key or a nonce
   static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
-  // this is the state that changes during absorption of data
-  struct ComboState {
-    detail::Sstate s;
-    detail::Rstate r;
-  };
-
-  // this is inited on lemac construction and not changed after
-  struct LeMacContext {
-    detail::Sstate init;
-    __m128i keys[2][11];
-    __m128i subkeys[18];
-
-    template <std::size_t i>
-      requires(i >= 0 && i <= 8)
-    std::span<const __m128i, 11> get_subkey() const {
-      return std::span<const __m128i, 11>(subkeys + i, 11);
-    }
-  };
-
 private:
   void init(std::span<const std::uint8_t, key_size> key) noexcept;
   static constexpr std::size_t block_size = 64;
 
-  void tail(const LeMacContext& context, detail::Sstate& state,
+  void tail(const detail::LeMacContext& context, detail::Sstate& state,
             std::span<const std::uint8_t> nonce,
             std::span<std::uint8_t, 16> target) const noexcept;
-  LeMacContext m_context;
-  ComboState m_state;
+  detail::LeMacContext m_context;
+  detail::ComboState m_state;
   /// this is a buffer that keeps data between update() invocations,
   /// in case data is provided in sizes not evenly divisible by the block size
   std::array<std::uint8_t, block_size> m_buf{};

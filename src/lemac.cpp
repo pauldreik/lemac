@@ -129,7 +129,7 @@ void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
   roundkeys[10] = a;
 }
 
-void init(lemac::LeMac::LeMacContext& ctx,
+void init(lemac::detail::LeMacContext& ctx,
           std::span<const uint8_t, lemac::key_size> key) {
   __m128i Ki[11];
   AES128_keyschedule(_mm_loadu_si128((const __m128i*)key.data()), Ki);
@@ -496,7 +496,7 @@ LeMac::oneshot(std::span<const uint8_t> data,
   }
 }
 
-void LeMac::tail(const LeMacContext& context, detail::Sstate& S,
+void LeMac::tail(const detail::LeMacContext& context, detail::Sstate& S,
                  std::span<const std::uint8_t> nonce,
                  std::span<std::uint8_t, 16> target) const noexcept {
   assert(nonce.size() == 16);
