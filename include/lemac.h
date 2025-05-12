@@ -16,6 +16,12 @@ namespace lemac::inline v1 {
 /// the size of the key in bytes
 static constexpr std::size_t key_size = 16;
 
+namespace detail {
+struct Sstate {
+  __m128i S[9];
+};
+} // namespace detail
+
 /**
  * A cryptographic hash function designed by Augustin Bariant
  */
@@ -110,10 +116,6 @@ public:
   /// zeros which can be used as a key or a nonce
   static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
-  struct Sstate {
-    __m128i S[9];
-  };
-
   struct Rstate {
     void reset();
     __m128i RR;
@@ -124,13 +126,13 @@ public:
 
   // this is the state that changes during absorption of data
   struct ComboState {
-    Sstate s;
+    detail::Sstate s;
     Rstate r;
   };
 
   // this is inited on lemac construction and not changed after
   struct LeMacContext {
-    Sstate init;
+    detail::Sstate init;
     __m128i keys[2][11];
     __m128i subkeys[18];
 
@@ -145,7 +147,7 @@ private:
   void init(std::span<const std::uint8_t, key_size> key) noexcept;
   static constexpr std::size_t block_size = 64;
 
-  void tail(const LeMacContext& context, Sstate& state,
+  void tail(const LeMacContext& context, detail::Sstate& state,
             std::span<const std::uint8_t> nonce,
             std::span<std::uint8_t, 16> target) const noexcept;
   LeMacContext m_context;
