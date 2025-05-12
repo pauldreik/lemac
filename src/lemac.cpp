@@ -224,24 +224,23 @@ inline void process_zero_block(lemac::detail::Sstate& S,
 
 namespace lemac {
 
-LeMac::LeMac() noexcept { init(zeros); }
+LeMac::LeMac() noexcept {
+  ::init(m_context, zeros);
+  reset();
+}
 
 LeMac::LeMac(std::span<const std::uint8_t> key) {
   if (key.size() != key_size) {
     throw std::runtime_error("wrong size of key");
   }
-  init(key.first<key_size>());
+  ::init(m_context, key.first<key_size>());
+  reset();
 }
 
 void LeMac::reset() noexcept {
   m_state.s = m_context.init;
   m_state.r.reset();
   m_bufsize = 0;
-}
-
-void LeMac::init(std::span<const uint8_t, key_size> key) noexcept {
-  ::init(m_context, key);
-  reset();
 }
 
 void LeMac::update(std::span<const uint8_t> data) noexcept {

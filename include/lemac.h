@@ -144,7 +144,6 @@ public:
   static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
 private:
-  void init(std::span<const std::uint8_t, key_size> key) noexcept;
   static constexpr std::size_t block_size = 64;
 
   void tail(const detail::LeMacContext& context, detail::Sstate& state,
