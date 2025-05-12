@@ -158,7 +158,7 @@ void init(lemac::LeMac::LeMacContext& ctx,
 constexpr auto vector_register_alignment = std::alignment_of_v<__m128i>;
 
 // assumes no alignment
-inline void process_block(lemac::detail::Sstate& S, lemac::LeMac::Rstate& R,
+inline void process_block(lemac::detail::Sstate& S, lemac::detail::Rstate& R,
                           const std::uint8_t* ptr) noexcept {
   const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
   const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
@@ -182,7 +182,7 @@ inline void process_block(lemac::detail::Sstate& S, lemac::LeMac::Rstate& R,
 }
 
 inline void process_aligned_block(lemac::detail::Sstate& S,
-                                  lemac::LeMac::Rstate& R,
+                                  lemac::detail::Rstate& R,
                                   const __m128i* ptr) noexcept {
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
@@ -202,7 +202,7 @@ inline void process_aligned_block(lemac::detail::Sstate& S,
 }
 
 inline void process_zero_block(lemac::detail::Sstate& S,
-                               lemac::LeMac::Rstate& R) noexcept {
+                               lemac::detail::Rstate& R) noexcept {
   const __m128i M = _mm_set_epi64x(0, 0);
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], M);
@@ -373,14 +373,14 @@ void LeMac::finalize_to(std::span<const std::uint8_t> nonce,
   }
 }
 
-void LeMac::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
+void detail::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
 
 std::array<uint8_t, 16>
 LeMac::oneshot(std::span<const uint8_t> data,
                std::span<const uint8_t> nonce) const noexcept {
 
   detail::Sstate S = m_context.init;
-  Rstate R{};
+  detail::Rstate R{};
 
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;

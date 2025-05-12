@@ -20,6 +20,15 @@ namespace detail {
 struct Sstate {
   __m128i S[9];
 };
+
+struct Rstate {
+  void reset();
+  __m128i RR;
+  __m128i R0;
+  __m128i R1;
+  __m128i R2;
+};
+
 } // namespace detail
 
 /**
@@ -116,18 +125,10 @@ public:
   /// zeros which can be used as a key or a nonce
   static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
-  struct Rstate {
-    void reset();
-    __m128i RR;
-    __m128i R0;
-    __m128i R1;
-    __m128i R2;
-  };
-
   // this is the state that changes during absorption of data
   struct ComboState {
     detail::Sstate s;
-    Rstate r;
+    detail::Rstate r;
   };
 
   // this is inited on lemac construction and not changed after
