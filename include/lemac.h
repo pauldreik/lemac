@@ -146,9 +146,6 @@ public:
 private:
   static constexpr std::size_t block_size = 64;
 
-  void tail(const detail::LeMacContext& context, detail::Sstate& state,
-            std::span<const std::uint8_t> nonce,
-            std::span<std::uint8_t, 16> target) const noexcept;
   detail::LeMacContext m_context;
   detail::ComboState m_state;
   /// this is a buffer that keeps data between update() invocations,

@@ -220,6 +220,28 @@ inline void process_zero_block(lemac::detail::Sstate& S,
   R.R0 = R.RR /*^ M1*/;
   R.RR = M;
 }
+
+void tail(const lemac::detail::LeMacContext& context, lemac::detail::Sstate& S,
+          std::span<const std::uint8_t> nonce,
+          std::span<std::uint8_t, 16> target) noexcept {
+  assert(nonce.size() == 16);
+
+  const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
+
+  __m128i T = N ^ AES128(context.keys[0], N);
+  T ^= AES128_modified(context.get_subkey<0>(), S.S[0]);
+  T ^= AES128_modified(context.get_subkey<1>(), S.S[1]);
+  T ^= AES128_modified(context.get_subkey<2>(), S.S[2]);
+  T ^= AES128_modified(context.get_subkey<3>(), S.S[3]);
+  T ^= AES128_modified(context.get_subkey<4>(), S.S[4]);
+  T ^= AES128_modified(context.get_subkey<5>(), S.S[5]);
+  T ^= AES128_modified(context.get_subkey<6>(), S.S[6]);
+  T ^= AES128_modified(context.get_subkey<7>(), S.S[7]);
+  T ^= AES128_modified(context.get_subkey<8>(), S.S[8]);
+
+  const auto tag = AES128(std::span(context.keys[1]), T);
+  _mm_storeu_si128((__m128i*)target.data(), tag);
+}
 } // namespace
 
 namespace lemac {
@@ -495,25 +517,4 @@ LeMac::oneshot(std::span<const uint8_t> data,
   }
 }
 
-void LeMac::tail(const detail::LeMacContext& context, detail::Sstate& S,
-                 std::span<const std::uint8_t> nonce,
-                 std::span<std::uint8_t, 16> target) const noexcept {
-  assert(nonce.size() == 16);
-
-  const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
-
-  __m128i T = N ^ AES128(m_context.keys[0], N);
-  T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-  T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-  T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-  T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-  T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-  T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-  T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-  T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-  T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
-
-  const auto tag = AES128(std::span(context.keys[1]), T);
-  _mm_storeu_si128((__m128i*)target.data(), tag);
-}
 } // namespace lemac
