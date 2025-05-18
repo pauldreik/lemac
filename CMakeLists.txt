@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 project(lemac LANGUAGES CXX)
 
-add_library(lemac src/lemac.cpp include/lemac.h)
+add_library(lemac src/lemac.cpp include/lemac.h src/impl_interface.h
+                  src/lemac_aesni.cpp src/lemac_aesni.h)
 add_library(lemac::lemac ALIAS lemac)
 target_compile_features(lemac PUBLIC cxx_std_20)
 target_include_directories(lemac PRIVATE src)
