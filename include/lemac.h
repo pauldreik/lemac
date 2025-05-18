@@ -16,8 +16,9 @@ namespace lemac::inline v1 {
 static constexpr std::size_t key_size = 16;
 
 namespace detail {
+// items in this namespace are not part of the public api
 class ImplInterface;
-}
+} // namespace detail
 
 /**
  * A cryptographic hash function designed by Augustin Bariant
