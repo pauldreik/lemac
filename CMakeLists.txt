@@ -7,14 +7,16 @@ add_library(
   include/lemac.h
   src/impl_interface.h
   src/lemac.cpp
-  src/lemac_aesni.cpp
+  src/lemac_aesni_plain.cpp
+  src/lemac_aesni_vaes.cpp
   src/lemac_aesni.h
+  src/lemac_aesni_impl.h
   src/lemac_arm64_plain.cpp
   src/lemac_arm64_vaes.cpp
   src/lemac_arm64.h
   src/lemac_arm64_impl.h
 )
-set_source_files_properties(src/lemac_arm64_vaes.cpp PROPERTIES COMPILE_OPTIONS "-mvaes")
+set_source_files_properties(src/lemac_aesni_vaes.cpp PROPERTIES COMPILE_OPTIONS "-mvaes")
 
 add_library(lemac::lemac ALIAS lemac)
 target_compile_features(lemac PUBLIC cxx_std_20)

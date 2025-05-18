@@ -7,19 +7,171 @@
  * https://github.com/pauldreik/lemac
  * SPDX-License-Identifier: BSL-1.0
  */
+#pragma once
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <memory>
+#include <span>
 
-#include <immintrin.h>
-#include <wmmintrin.h>
-
+#include "impl_interface.h"
+#include "lemac.h"
 #include "lemac_aesni.h"
 
+#include <immintrin.h>
+
 #if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 #endif
+
+namespace lemac::inline v1 {
+
+// this struct acts as a templated namespace, so it can compiled multiple times
+// under unique names
+template <AESNI_variant variant> struct AESNI {
+
+  struct Sstate {
+    __m128i S[9];
+  };
+
+  struct Rstate {
+    void reset();
+    __m128i RR;
+    __m128i R0;
+    __m128i R1;
+    __m128i R2;
+  };
+
+  // this is the state that changes during absorption of data
+  struct ComboState {
+    Sstate s;
+    Rstate r;
+  };
+
+  // this is inited on lemac construction and not changed after
+  struct LeMacContext {
+    Sstate init;
+    __m128i keys[2][11];
+    __m128i subkeys[18];
+
+    template <std::size_t i>
+      requires(i >= 0 && i <= 8)
+    std::span<const __m128i, 11> get_subkey() const {
+      return std::span<const __m128i, 11>(subkeys + i, 11);
+    }
+  };
+
+  /**
+   * A cryptographic hash function designed by Augustin Bariant
+   */
+  class LeMacAESNI final : public lemac::detail::ImplInterface {
+  public:
+    static std::unique_ptr<LeMacAESNI> make() {
+      return std::make_unique<LeMacAESNI>();
+    }
+
+    static std::unique_ptr<LeMacAESNI>
+    make(std::span<const std::uint8_t, key_size> key) {
+      return std::make_unique<LeMacAESNI>(key);
+    }
+
+    std::unique_ptr<detail::ImplInterface> clone() const noexcept override {
+      return std::unique_ptr<detail::ImplInterface>{new LeMacAESNI(*this)};
+    }
+
+    /**
+     * constructs a hasher with a zero key
+     */
+    LeMacAESNI() noexcept;
+
+    /**
+     * constructs a hasher with a correctly sized key
+     *
+     * @param key the key does not need to be aligned
+     */
+    explicit LeMacAESNI(std::span<const std::uint8_t, key_size> key) noexcept;
+
+    LeMacAESNI(const LeMacAESNI& other) noexcept = default;
+    LeMacAESNI(LeMacAESNI&& other) noexcept = default;
+    LeMacAESNI& operator=(const LeMacAESNI& other) noexcept = default;
+    LeMacAESNI& operator=(LeMacAESNI&& other) noexcept = default;
+    ~LeMacAESNI() noexcept override = default;
+
+    /**
+     * updates the hash with the provided data. this may be called zero or more
+     * times.
+     *
+     * if all data is known up front, prefer the oneshot() function instead
+     * which is faster.
+     *
+     * @param data does not need to be aligned
+     */
+    void update(std::span<const std::uint8_t> data) noexcept override;
+
+    /**
+     * finalizes the hash and writes the result into the provided target
+     * @param nonce does not need to be aligned
+     * @param target does not need to be aligned
+     */
+    void finalize_to(std::span<const std::uint8_t> nonce,
+                     std::span<std::uint8_t, 16> target) noexcept override;
+
+    /**
+     * hashes with the provided data and then finalizes the hash, using a zero
+     * nonce. this is more efficient than update()+finalize() and should be
+     * preferred when all data is known upfront.
+     *
+     * @param data does not need to be aligned
+     * @return the lemac hash
+     */
+    std::array<std::uint8_t, 16>
+    oneshot(std::span<const std::uint8_t> data) const noexcept {
+      return oneshot(data, zeros);
+    }
+
+    /**
+     * hashes with the provided data and then finalizes the hash with the given
+     * nonce. this is more efficient than update()+finalize() and should be
+     * preferred when all data is known upfront.
+     *
+     * @param data does not need to be aligned
+     * @param nonce does not need to be aligned
+     * @return the lemac hash
+     */
+    std::array<std::uint8_t, 16>
+    oneshot(std::span<const std::uint8_t> data,
+            std::span<const std::uint8_t> nonce) const noexcept override;
+
+    /**
+     * resets the object as if it had been newly constructed. this is more
+     * efficent than creating a new object.
+     */
+    void reset() noexcept override;
+
+  private:
+    /// zeros which can be used as a key or a nonce
+    static constexpr std::array<const std::uint8_t, key_size> zeros{};
+
+    static constexpr std::size_t block_size = 64;
+
+    LeMacContext m_context;
+    ComboState m_state;
+
+    /// this is a buffer that keeps data between update() invocations,
+    /// in case data is provided in sizes not evenly divisible by the block size
+    std::array<std::uint8_t, block_size> m_buf{};
+    std::size_t m_bufsize{};
+  };
+}; // struct AESNI
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
+} // namespace lemac::inline v1
 
 namespace {
 struct compile_time_options {
@@ -127,7 +279,8 @@ void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
   roundkeys[10] = a;
 }
 
-void init(lemac::AESNI_detail::LeMacContext& ctx,
+template <lemac::AESNI_variant variant>
+void init(typename lemac::AESNI<variant>::LeMacContext& ctx,
           std::span<const uint8_t, lemac::key_size> key) {
   __m128i Ki[11];
   AES128_keyschedule(_mm_loadu_si128((const __m128i*)key.data()), Ki);
@@ -156,8 +309,9 @@ void init(lemac::AESNI_detail::LeMacContext& ctx,
 constexpr auto vector_register_alignment = std::alignment_of_v<__m128i>;
 
 // assumes no alignment
-inline void process_block(lemac::AESNI_detail::Sstate& S,
-                          lemac::AESNI_detail::Rstate& R,
+template <lemac::AESNI_variant variant>
+inline void process_block(typename lemac::AESNI<variant>::Sstate& S,
+                          typename lemac::AESNI<variant>::Rstate& R,
                           const std::uint8_t* ptr) noexcept {
   const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
   const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
@@ -180,8 +334,9 @@ inline void process_block(lemac::AESNI_detail::Sstate& S,
   R.RR = M2;
 }
 
-inline void process_aligned_block(lemac::AESNI_detail::Sstate& S,
-                                  lemac::AESNI_detail::Rstate& R,
+template <lemac::AESNI_variant variant>
+inline void process_aligned_block(typename lemac::AESNI<variant>::Sstate& S,
+                                  typename lemac::AESNI<variant>::Rstate& R,
                                   const __m128i* ptr) noexcept {
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
@@ -200,8 +355,10 @@ inline void process_aligned_block(lemac::AESNI_detail::Sstate& S,
   R.RR = *(ptr + 2);
 }
 
-inline void process_zero_block(lemac::AESNI_detail::Sstate& S,
-                               lemac::AESNI_detail::Rstate& R) noexcept {
+template <lemac::AESNI_variant variant>
+inline void
+process_zero_block(typename lemac::AESNI<variant>::Sstate& S,
+                   typename lemac::AESNI<variant>::Rstate& R) noexcept {
   const __m128i M = _mm_set_epi64x(0, 0);
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], M);
@@ -220,48 +377,58 @@ inline void process_zero_block(lemac::AESNI_detail::Sstate& S,
   R.RR = M;
 }
 
-void tail(const lemac::AESNI_detail::LeMacContext& context,
-          lemac::AESNI_detail::Sstate& S, std::span<const std::uint8_t> nonce,
+template <lemac::AESNI_variant variant>
+void tail(const typename lemac::AESNI<variant>::LeMacContext& context,
+          typename lemac::AESNI<variant>::Sstate& S,
+          std::span<const std::uint8_t> nonce,
           std::span<std::uint8_t, 16> target) noexcept {
   assert(nonce.size() == 16);
 
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
   __m128i T = N ^ AES128(context.keys[0], N);
-  T ^= AES128_modified(context.get_subkey<0>(), S.S[0]);
-  T ^= AES128_modified(context.get_subkey<1>(), S.S[1]);
-  T ^= AES128_modified(context.get_subkey<2>(), S.S[2]);
-  T ^= AES128_modified(context.get_subkey<3>(), S.S[3]);
-  T ^= AES128_modified(context.get_subkey<4>(), S.S[4]);
-  T ^= AES128_modified(context.get_subkey<5>(), S.S[5]);
-  T ^= AES128_modified(context.get_subkey<6>(), S.S[6]);
-  T ^= AES128_modified(context.get_subkey<7>(), S.S[7]);
-  T ^= AES128_modified(context.get_subkey<8>(), S.S[8]);
+  T ^= AES128_modified(context.template get_subkey<0>(), S.S[0]);
+  T ^= AES128_modified(context.template get_subkey<1>(), S.S[1]);
+  T ^= AES128_modified(context.template get_subkey<2>(), S.S[2]);
+  T ^= AES128_modified(context.template get_subkey<3>(), S.S[3]);
+  T ^= AES128_modified(context.template get_subkey<4>(), S.S[4]);
+  T ^= AES128_modified(context.template get_subkey<5>(), S.S[5]);
+  T ^= AES128_modified(context.template get_subkey<6>(), S.S[6]);
+  T ^= AES128_modified(context.template get_subkey<7>(), S.S[7]);
+  T ^= AES128_modified(context.template get_subkey<8>(), S.S[8]);
 
   const auto tag = AES128(std::span(context.keys[1]), T);
   _mm_storeu_si128((__m128i*)target.data(), tag);
 }
 } // namespace
 
+// begin paste
+
 namespace lemac {
 
-LeMacAESNI::LeMacAESNI() noexcept {
-  ::init(m_context, zeros);
+template <lemac::AESNI_variant variant>
+lemac::AESNI<variant>::LeMacAESNI::LeMacAESNI() noexcept {
+  ::init<variant>(m_context, zeros);
   reset();
 }
 
-LeMacAESNI::LeMacAESNI(std::span<const uint8_t, key_size> key) noexcept {
-  ::init(m_context, key);
+template <lemac::AESNI_variant variant>
+lemac::AESNI<variant>::LeMacAESNI::LeMacAESNI(
+    std::span<const uint8_t, key_size> key) noexcept {
+  ::init<variant>(m_context, key);
   reset();
 }
 
-void LeMacAESNI::reset() noexcept {
+template <lemac::AESNI_variant variant>
+void lemac::AESNI<variant>::LeMacAESNI::reset() noexcept {
   m_state.s = m_context.init;
   m_state.r.reset();
   m_bufsize = 0;
 }
 
-void LeMacAESNI::update(std::span<const uint8_t> data) noexcept {
+template <lemac::AESNI_variant variant>
+void lemac::AESNI<variant>::LeMacAESNI::update(
+    std::span<const uint8_t> data) noexcept {
 
   bool process_entire_m_buf = false;
   std::size_t remaining_to_full_block;
@@ -291,9 +458,10 @@ void LeMacAESNI::update(std::span<const uint8_t> data) noexcept {
         (reinterpret_cast<std::uintptr_t>(m_buf.data()) %
          vector_register_alignment) == 0;
     if (buf_is_aligned) {
-      process_aligned_block(state.s, state.r, (const __m128i*)m_buf.data());
+      process_aligned_block<variant>(state.s, state.r,
+                                     (const __m128i*)m_buf.data());
     } else {
-      process_block(state.s, state.r, m_buf.data());
+      process_block<variant>(state.s, state.r, m_buf.data());
     }
     m_bufsize = 0;
     data = data.subspan(remaining_to_full_block);
@@ -308,11 +476,11 @@ void LeMacAESNI::update(std::span<const uint8_t> data) noexcept {
       (reinterpret_cast<std::uintptr_t>(ptr) % vector_register_alignment) == 0;
   if (aligned) {
     for (; ptr != block_end; ptr += block_size) {
-      process_aligned_block(state.s, state.r, (const __m128i*)ptr);
+      process_aligned_block<variant>(state.s, state.r, (const __m128i*)ptr);
     }
   } else {
     for (; ptr != block_end; ptr += block_size) {
-      process_block(state.s, state.r, ptr);
+      process_block<variant>(state.s, state.r, ptr);
     }
   }
   m_state = state;
@@ -324,8 +492,10 @@ void LeMacAESNI::update(std::span<const uint8_t> data) noexcept {
   }
 }
 
-void LeMacAESNI::finalize_to(std::span<const std::uint8_t> nonce,
-                             std::span<std::uint8_t, 16> target) noexcept {
+template <lemac::AESNI_variant variant>
+void lemac::AESNI<variant>::LeMacAESNI::finalize_to(
+    std::span<const std::uint8_t> nonce,
+    std::span<std::uint8_t, 16> target) noexcept {
 
   // let m_buf be padded
   assert(m_bufsize < m_buf.size());
@@ -336,20 +506,21 @@ void LeMacAESNI::finalize_to(std::span<const std::uint8_t> nonce,
   const bool buf_is_aligned = (reinterpret_cast<std::uintptr_t>(m_buf.data()) %
                                vector_register_alignment) == 0;
   if (buf_is_aligned) {
-    process_aligned_block(m_state.s, m_state.r, (const __m128i*)m_buf.data());
+    process_aligned_block<variant>(m_state.s, m_state.r,
+                                   (const __m128i*)m_buf.data());
   } else {
-    process_block(m_state.s, m_state.r, m_buf.data());
+    process_block<variant>(m_state.s, m_state.r, m_buf.data());
   }
 
   // Four final rounds to absorb message state
   if constexpr (compile_time_options::unroll_zero_blocks) {
-    process_zero_block(m_state.s, m_state.r);
-    process_zero_block(m_state.s, m_state.r);
-    process_zero_block(m_state.s, m_state.r);
-    process_zero_block(m_state.s, m_state.r);
+    process_zero_block<variant>(m_state.s, m_state.r);
+    process_zero_block<variant>(m_state.s, m_state.r);
+    process_zero_block<variant>(m_state.s, m_state.r);
+    process_zero_block<variant>(m_state.s, m_state.r);
   } else {
     for (int i = 0; i < 4; ++i) {
-      process_zero_block(m_state.s, m_state.r);
+      process_zero_block<variant>(m_state.s, m_state.r);
     }
   }
 
@@ -362,29 +533,33 @@ void LeMacAESNI::finalize_to(std::span<const std::uint8_t> nonce,
 
     auto& S = m_state.s;
     __m128i T = N ^ AES128(m_context.keys[0], N);
-    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+    T ^= AES128_modified(m_context.template get_subkey<0>(), S.S[0]);
+    T ^= AES128_modified(m_context.template get_subkey<1>(), S.S[1]);
+    T ^= AES128_modified(m_context.template get_subkey<2>(), S.S[2]);
+    T ^= AES128_modified(m_context.template get_subkey<3>(), S.S[3]);
+    T ^= AES128_modified(m_context.template get_subkey<4>(), S.S[4]);
+    T ^= AES128_modified(m_context.template get_subkey<5>(), S.S[5]);
+    T ^= AES128_modified(m_context.template get_subkey<6>(), S.S[6]);
+    T ^= AES128_modified(m_context.template get_subkey<7>(), S.S[7]);
+    T ^= AES128_modified(m_context.template get_subkey<8>(), S.S[8]);
 
     const auto tag = AES128(m_context.keys[1], T);
     _mm_storeu_si128((__m128i*)target.data(), tag);
   }
 }
 
-void AESNI_detail::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
+template <lemac::AESNI_variant variant>
+void lemac::AESNI<variant>::Rstate::reset() {
+  std::memset(this, 0, sizeof(*this));
+}
 
-std::array<uint8_t, 16>
-LeMacAESNI::oneshot(std::span<const uint8_t> data,
-                    std::span<const uint8_t> nonce) const noexcept {
+template <lemac::AESNI_variant variant>
+std::array<uint8_t, 16> lemac::AESNI<variant>::LeMacAESNI::oneshot(
+    std::span<const uint8_t> data,
+    std::span<const uint8_t> nonce) const noexcept {
 
-  AESNI_detail::Sstate S = m_context.init;
-  AESNI_detail::Rstate R{};
+  Sstate S = m_context.init;
+  Rstate R{};
 
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;
@@ -415,7 +590,7 @@ LeMacAESNI::oneshot(std::span<const uint8_t> data,
           R.R0 = R.RR ^ *(ptr + 1);
           R.RR = *(ptr + 2);
         } else {
-          process_aligned_block(S, R, ptr);
+          process_aligned_block<variant>(S, R, ptr);
         }
       }
     } else {
@@ -443,7 +618,7 @@ LeMacAESNI::oneshot(std::span<const uint8_t> data,
           R.R0 = R.RR ^ M1;
           R.RR = M2;
         } else {
-          process_block(S, R, ptr);
+          process_block<variant>(S, R, ptr);
         }
       }
     }
@@ -460,7 +635,7 @@ LeMacAESNI::oneshot(std::span<const uint8_t> data,
   assert(bufsize < buf.size());
   buf[bufsize] = 1;
 
-  process_block(S, R, buf.data());
+  process_block<variant>(S, R, buf.data());
 
   // Four final rounds to absorb message state
   if constexpr (compile_time_options::unroll_zero_blocks) {
@@ -470,7 +645,7 @@ LeMacAESNI::oneshot(std::span<const uint8_t> data,
     process_zero_block(S, R);
   } else {
     for (int i = 0; i < 4; ++i) {
-      process_zero_block(S, R);
+      process_zero_block<variant>(S, R);
     }
   }
   assert(nonce.size() == 16);
@@ -479,15 +654,15 @@ LeMacAESNI::oneshot(std::span<const uint8_t> data,
 
   if constexpr (!compile_time_options::oneshot_uses_tail) {
     __m128i T = N ^ AES128(m_context.keys[0], N);
-    T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
-    T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
-    T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
-    T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
-    T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
-    T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
-    T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
-    T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
-    T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+    T ^= AES128_modified(m_context.template get_subkey<0>(), S.S[0]);
+    T ^= AES128_modified(m_context.template get_subkey<1>(), S.S[1]);
+    T ^= AES128_modified(m_context.template get_subkey<2>(), S.S[2]);
+    T ^= AES128_modified(m_context.template get_subkey<3>(), S.S[3]);
+    T ^= AES128_modified(m_context.template get_subkey<4>(), S.S[4]);
+    T ^= AES128_modified(m_context.template get_subkey<5>(), S.S[5]);
+    T ^= AES128_modified(m_context.template get_subkey<6>(), S.S[6]);
+    T ^= AES128_modified(m_context.template get_subkey<7>(), S.S[7]);
+    T ^= AES128_modified(m_context.template get_subkey<8>(), S.S[8]);
 
     const auto tag = AES128(m_context.keys[1], T);
     std::array<std::uint8_t, 16> ret;

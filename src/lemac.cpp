@@ -20,11 +20,11 @@ namespace lemac::inline v1 {
 LeMac::LeMac() noexcept {
 
   //  m_impl = make_arm64<Variant::plain>();
-  m_impl = make_arm64<Variant::vaes>();
-  return;
+  // m_impl = make_arm64<Variant::vaes>();
+  // return;
 
 #if defined(__x86_64__)
-  m_impl = LeMacAESNI::make();
+  m_impl = make_aesni<AESNI_variant::plain>();
 #endif
 
   if (!m_impl) {
@@ -42,7 +42,7 @@ LeMac::LeMac(std::span<const uint8_t> key) {
   const auto right_size_key = key.first<lemac::key_size>();
 
 #if defined(__x86_64__)
-  m_impl = LeMacAESNI::make(right_size_key);
+  m_impl = make_aesni<AESNI_variant::plain>(right_size_key);
 #endif
 
   if (!m_impl) {
