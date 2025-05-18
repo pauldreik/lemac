@@ -9,6 +9,7 @@
  */
 
 #include "lemac.h"
+#include "lemac_arm64.h"
 
 #if defined(__x86_64__)
 #include "lemac_aesni.h"
@@ -17,6 +18,11 @@
 namespace lemac::inline v1 {
 
 LeMac::LeMac() noexcept {
+
+  //  m_impl = make_arm64<Variant::plain>();
+  m_impl = make_arm64<Variant::vaes>();
+  return;
+
 #if defined(__x86_64__)
   m_impl = LeMacAESNI::make();
 #endif
