@@ -251,11 +251,8 @@ LeMacAESNI::LeMacAESNI() noexcept {
   reset();
 }
 
-LeMacAESNI::LeMacAESNI(std::span<const std::uint8_t> key) {
-  if (key.size() != key_size) {
-    throw std::runtime_error("wrong size of key");
-  }
-  ::init(m_context, key.first<key_size>());
+LeMacAESNI::LeMacAESNI(std::span<const uint8_t, key_size> key) noexcept {
+  ::init(m_context, key);
   reset();
 }
 

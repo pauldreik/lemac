@@ -58,6 +58,13 @@ TEST_CASE("empty input gives correct output") {
   REQUIRE(expected == actual);
 }
 
+TEST_CASE("wrong size key causes an exception") {
+
+  std::array<std::uint8_t, 15> wrong_size_key{};
+
+  REQUIRE_THROWS(lemac::LeMac(wrong_size_key));
+}
+
 TEST_CASE("update+finalize: 16 zeros input") {
   lemac::LeMac lm;
   constexpr auto MSIZE = 16;

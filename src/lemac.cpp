@@ -23,8 +23,15 @@ LeMac::LeMac() noexcept {
 }
 
 LeMac::LeMac(std::span<const uint8_t> key) {
+
+  if (key.size() != lemac::key_size) {
+    throw std::runtime_error("wrong size of key");
+  }
+
+  const auto right_size_key = key.first<lemac::key_size>();
+
 #if defined(__x86_64__)
-  m_impl = LeMacAESNI::make(key);
+  m_impl = LeMacAESNI::make(right_size_key);
 #endif
 }
 

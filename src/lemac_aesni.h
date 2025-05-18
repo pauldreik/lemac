@@ -60,7 +60,8 @@ public:
     return std::make_unique<LeMacAESNI>();
   }
 
-  static std::unique_ptr<LeMacAESNI> make(std::span<const std::uint8_t> key) {
+  static std::unique_ptr<LeMacAESNI>
+  make(std::span<const std::uint8_t, key_size> key) {
     return std::make_unique<LeMacAESNI>(key);
   }
 
@@ -74,12 +75,11 @@ public:
   LeMacAESNI() noexcept;
 
   /**
-   * constructs a hasher with a correctly sized key, verified at runtime.
+   * constructs a hasher with a correctly sized key
    *
-   * @param key the key does not need to be aligned, but it must have the
-   * correct size (lemac::key_size). if not, an exception is thrown.
+   * @param key the key does not need to be aligned
    */
-  explicit LeMacAESNI(std::span<const std::uint8_t> key);
+  explicit LeMacAESNI(std::span<const std::uint8_t, key_size> key) noexcept;
 
   LeMacAESNI(const LeMacAESNI& other) noexcept = default;
   LeMacAESNI(LeMacAESNI&& other) noexcept = default;
