@@ -9,28 +9,40 @@
  */
 
 #include "lemac.h"
-#include "lemac_arm64.h"
 
-#if defined(__x86_64__)
+#if defined(LEMAC_ARCH_IS_AMD64)
 #include "lemac_aesni.h"
+#include "x86_capabilities.h"
+#elif defined(LEMAC_ARCH_IS_ARM64)
+#include "lemac_arm64.h"
+#else
+#error "unsupported architecture"
 #endif
 
 namespace lemac::inline v1 {
 
 LeMac::LeMac() noexcept {
 
+#if defined(LEMAC_ARCH_IS_AMD64)
+  switch (lemac::get_aesni_support_level()) {
+  case AESNI_variant::aes128:
+    m_impl = make_aesni<AESNI_variant::aes128>();
+    break;
+  case AESNI_variant::vaes512full:
+    m_impl = make_aesni<AESNI_variant::vaes512full>();
+    break;
+  default:
+    // unsupported!
+    std::abort();
+  }
+
+#elif defined(LEMAC_ARCH_IS_ARM64)
   //  m_impl = make_arm64<Variant::plain>();
   // m_impl = make_arm64<Variant::vaes>();
   // return;
-
-#if defined(__x86_64__)
-  m_impl = make_aesni<AESNI_variant::plain>();
+#else
+#error "unsupported architecture"
 #endif
-
-  if (!m_impl) {
-    // no implementation available
-    std::abort();
-  }
 }
 
 LeMac::LeMac(std::span<const uint8_t> key) {
@@ -41,14 +53,25 @@ LeMac::LeMac(std::span<const uint8_t> key) {
 
   const auto right_size_key = key.first<lemac::key_size>();
 
-#if defined(__x86_64__)
-  m_impl = make_aesni<AESNI_variant::plain>(right_size_key);
-#endif
-
-  if (!m_impl) {
-    // no implementation available
+#if defined(LEMAC_ARCH_IS_AMD64)
+  switch (lemac::get_aesni_support_level()) {
+  case AESNI_variant::aes128:
+    m_impl = make_aesni<AESNI_variant::aes128>(right_size_key);
+    break;
+  case AESNI_variant::vaes512full:
+    m_impl = make_aesni<AESNI_variant::vaes512full>(right_size_key);
+    break;
+  default:
+    // unsupported!
     std::abort();
   }
+#elif defined(LEMAC_ARCH_IS_ARM64)
+  //  m_impl = make_arm64<Variant::plain>(right_size_key);
+  // m_impl = make_arm64<Variant::vaes>(right_size_key);
+  // return;
+#else
+#error "unsupported architecture"
+#endif
 }
 
 LeMac::LeMac(const LeMac& other) noexcept { m_impl = other.m_impl->clone(); }
