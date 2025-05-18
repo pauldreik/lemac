@@ -17,7 +17,7 @@
 
 namespace lemac::inline v1 {
 
-namespace detail {
+namespace AESNI_detail {
 struct Sstate {
   __m128i S[9];
 };
@@ -49,7 +49,7 @@ struct LeMacContext {
   }
 };
 
-} // namespace detail
+} // namespace AESNI_detail
 
 /**
  * A cryptographic hash function designed by Augustin Bariant
@@ -144,8 +144,8 @@ private:
 
   static constexpr std::size_t block_size = 64;
 
-  detail::LeMacContext m_context;
-  detail::ComboState m_state;
+  AESNI_detail::LeMacContext m_context;
+  AESNI_detail::ComboState m_state;
 
   /// this is a buffer that keeps data between update() invocations,
   /// in case data is provided in sizes not evenly divisible by the block size

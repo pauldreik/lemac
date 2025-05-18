@@ -11,7 +11,6 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-#include <stdexcept>
 
 #include <immintrin.h>
 #include <wmmintrin.h>
@@ -55,7 +54,6 @@ __m128i AES128_modified(std::span<const __m128i, 11> Ki, __m128i x) {
 }
 
 __m128i AES128(std::span<const __m128i, 11> Ki, __m128i x) {
-  assert(Ki.size() == 11);
   x ^= Ki[0];
   x = _mm_aesenc_si128(x, Ki[1]);
   x = _mm_aesenc_si128(x, Ki[2]);
@@ -129,7 +127,7 @@ void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
   roundkeys[10] = a;
 }
 
-void init(lemac::detail::LeMacContext& ctx,
+void init(lemac::AESNI_detail::LeMacContext& ctx,
           std::span<const uint8_t, lemac::key_size> key) {
   __m128i Ki[11];
   AES128_keyschedule(_mm_loadu_si128((const __m128i*)key.data()), Ki);
@@ -158,7 +156,8 @@ void init(lemac::detail::LeMacContext& ctx,
 constexpr auto vector_register_alignment = std::alignment_of_v<__m128i>;
 
 // assumes no alignment
-inline void process_block(lemac::detail::Sstate& S, lemac::detail::Rstate& R,
+inline void process_block(lemac::AESNI_detail::Sstate& S,
+                          lemac::AESNI_detail::Rstate& R,
                           const std::uint8_t* ptr) noexcept {
   const auto M0 = _mm_loadu_si128((const __m128i*)(ptr + 0));
   const auto M1 = _mm_loadu_si128((const __m128i*)(ptr + 16));
@@ -181,8 +180,8 @@ inline void process_block(lemac::detail::Sstate& S, lemac::detail::Rstate& R,
   R.RR = M2;
 }
 
-inline void process_aligned_block(lemac::detail::Sstate& S,
-                                  lemac::detail::Rstate& R,
+inline void process_aligned_block(lemac::AESNI_detail::Sstate& S,
+                                  lemac::AESNI_detail::Rstate& R,
                                   const __m128i* ptr) noexcept {
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], *(ptr + 3));
@@ -201,8 +200,8 @@ inline void process_aligned_block(lemac::detail::Sstate& S,
   R.RR = *(ptr + 2);
 }
 
-inline void process_zero_block(lemac::detail::Sstate& S,
-                               lemac::detail::Rstate& R) noexcept {
+inline void process_zero_block(lemac::AESNI_detail::Sstate& S,
+                               lemac::AESNI_detail::Rstate& R) noexcept {
   const __m128i M = _mm_set_epi64x(0, 0);
   __m128i T = S.S[8];
   S.S[8] = _mm_aesenc_si128(S.S[7], M);
@@ -221,8 +220,8 @@ inline void process_zero_block(lemac::detail::Sstate& S,
   R.RR = M;
 }
 
-void tail(const lemac::detail::LeMacContext& context, lemac::detail::Sstate& S,
-          std::span<const std::uint8_t> nonce,
+void tail(const lemac::AESNI_detail::LeMacContext& context,
+          lemac::AESNI_detail::Sstate& S, std::span<const std::uint8_t> nonce,
           std::span<std::uint8_t, 16> target) noexcept {
   assert(nonce.size() == 16);
 
@@ -378,14 +377,14 @@ void LeMacAESNI::finalize_to(std::span<const std::uint8_t> nonce,
   }
 }
 
-void detail::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
+void AESNI_detail::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
 
 std::array<uint8_t, 16>
 LeMacAESNI::oneshot(std::span<const uint8_t> data,
                     std::span<const uint8_t> nonce) const noexcept {
 
-  detail::Sstate S = m_context.init;
-  detail::Rstate R{};
+  AESNI_detail::Sstate S = m_context.init;
+  AESNI_detail::Rstate R{};
 
   // process whole blocks
   const auto whole_blocks = data.size() / block_size;

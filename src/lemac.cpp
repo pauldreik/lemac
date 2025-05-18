@@ -20,6 +20,11 @@ LeMac::LeMac() noexcept {
 #if defined(__x86_64__)
   m_impl = LeMacAESNI::make();
 #endif
+
+  if (!m_impl) {
+    // no implementation available
+    std::abort();
+  }
 }
 
 LeMac::LeMac(std::span<const uint8_t> key) {
@@ -33,6 +38,11 @@ LeMac::LeMac(std::span<const uint8_t> key) {
 #if defined(__x86_64__)
   m_impl = LeMacAESNI::make(right_size_key);
 #endif
+
+  if (!m_impl) {
+    // no implementation available
+    std::abort();
+  }
 }
 
 LeMac::LeMac(const LeMac& other) noexcept { m_impl = other.m_impl->clone(); }
