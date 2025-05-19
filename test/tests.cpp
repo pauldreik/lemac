@@ -47,6 +47,15 @@ std::string tohex(std::span<const std::uint8_t> binary) {
 }
 } // namespace
 
+TEST_CASE("FIPS 107-upd1 AES-128 appendix A.1 test vectors") {
+
+  constexpr std::array<std::uint8_t, 16> Key = {
+      0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+      0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
+
+  lemac::LeMac lm(Key);
+}
+
 TEST_CASE("empty input gives correct output") {
   lemac::LeMac lm;
   constexpr auto MSIZE = 0;

@@ -29,8 +29,8 @@ if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_AMD64=1)
 elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64)")
   target_sources(
-    lemac PRIVATE src/lemac_arm64_plain.cpp src/lemac_arm64_vaes.cpp
-                  src/lemac_arm64.h src/lemac_arm64_impl.h)
+    lemac PRIVATE src/lemac_arm64_v8A.h  src/lemac_arm64_v8A.cpp
+                  src/lemac_arm64.h)
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_ARM64=1)
 
 else()

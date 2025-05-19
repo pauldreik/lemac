@@ -37,9 +37,7 @@ LeMac::LeMac() noexcept {
   }
 
 #elif defined(LEMAC_ARCH_IS_ARM64)
-  //  m_impl = make_arm64<Variant::plain>();
-  // m_impl = make_arm64<Variant::vaes>();
-  // return;
+  m_impl = make_arm64_v8A();
 #else
 #error "unsupported architecture"
 #endif
@@ -66,9 +64,7 @@ LeMac::LeMac(std::span<const uint8_t> key) {
     std::abort();
   }
 #elif defined(LEMAC_ARCH_IS_ARM64)
-  //  m_impl = make_arm64<Variant::plain>(right_size_key);
-  // m_impl = make_arm64<Variant::vaes>(right_size_key);
-  // return;
+  m_impl = make_arm64_v8A(right_size_key);
 #else
 #error "unsupported architecture"
 #endif
