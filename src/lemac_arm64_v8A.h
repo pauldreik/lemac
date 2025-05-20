@@ -66,6 +66,9 @@ public:
           std::span<const uint8_t> nonce) const noexcept override;
 
   void reset() noexcept override;
+
+private:
+  detail::LeMacContext m_context;
 };
 
 } // namespace lemac::inline v1

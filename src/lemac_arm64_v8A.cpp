@@ -1,5 +1,10 @@
 #include "lemac_arm64_v8A.h"
 #include "lemac.h"
+#include <fmt/core.h>
+#include <iostream>
+
+// this was useful for understanding how to work with neon:
+// http://const.me/articles/simd/NEON.pdf
 
 namespace lemac::inline v1 {
 
@@ -104,17 +109,57 @@ void AES128_keyschedule(const uint8x16_t K,
   }
 }
 
+void print(auto label, uint8x16_t x) {
+  std::array<std::uint8_t, 16> tmp;
+  vst1q_u8(tmp.data(), x);
+  fmt::println("{}", label);
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      fmt::print("{:02x} |", +tmp[i + j * 4]);
+    }
+    fmt::println("{}", "");
+  }
+  std::cout.flush();
+}
+
+uint8x16_t AES128(std::span<uint8x16_t, 11> roundkeys, uint8x16_t x) {
+  // see Algorithm 1 in FIPS-197
+  print("input data", x);
+  for (int round = 1; round < 10; ++round) {
+    // vaeseq_u8 is subbytes(shiftrows(a^b))
+    x = vaeseq_u8(x, roundkeys[round - 1]);
+    print("after addround, shiftrow, subbytes:", x);
+    // mixcolumns
+    x = vaesmcq_u8(x);
+    print("after mixcolumns", x);
+  }
+  // subbytes(shiftrows(addround))
+  x = vaeseq_u8(x, roundkeys[9]);
+  // addround
+  x = veorq_u8(x, roundkeys[10]);
+  print("when finished", x);
+  return x;
+}
+
+void init(std::span<const uint8_t, key_size> key, detail::LeMacContext& ctx) {
+  uint8x16_t Ki[11];
+  AES128_keyschedule(vld1q_u8(key.data()), Ki);
+  // constexpr std::array<std::uint8_t, 16> input = {
+  //     0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d,
+  //     0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34};
+  // auto encrypted = AES128(Ki, vld1q_u8(input.data()));
+}
+
 } // namespace
 
 LemacArm64v8A::LemacArm64v8A() noexcept : LemacArm64v8A(zeros) {}
 
 LemacArm64v8A::LemacArm64v8A(std::span<const uint8_t, key_size> key) noexcept {
-  uint8x16_t Ki[11];
-  AES128_keyschedule(vld1q_u8(key.data()), Ki);
+  init(key, m_context);
 }
 
 std::unique_ptr<detail::ImplInterface> LemacArm64v8A::clone() const noexcept {
-  return nullptr;
+  return std::make_unique<LemacArm64v8A>(*this);
 }
 
 void LemacArm64v8A::update(std::span<const uint8_t> data) noexcept { return; }
@@ -124,7 +169,9 @@ void LemacArm64v8A::finalize_to(std::span<const uint8_t> nonce,
 
 std::array<uint8_t, 16>
 LemacArm64v8A::oneshot(std::span<const uint8_t> data,
-                       std::span<const uint8_t> nonce) const noexcept {}
+                       std::span<const uint8_t> nonce) const noexcept {
+  return {};
+}
 
 void LemacArm64v8A::reset() noexcept {}
 

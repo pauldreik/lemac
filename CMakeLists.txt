@@ -28,11 +28,13 @@ if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
   )
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_AMD64=1)
 elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64)")
-  target_sources(
-    lemac PRIVATE src/lemac_arm64_v8A.h  src/lemac_arm64_v8A.cpp
-                  src/lemac_arm64.h)
+  target_sources(lemac PRIVATE src/lemac_arm64_v8A.h src/lemac_arm64_v8A.cpp
+                               src/lemac_arm64.h)
+  # found out with gcc -march=native -Q --help=target |grep mcpu
+  target_compile_options(lemac PRIVATE -mcpu=cortex-a76+crc+crypto)
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_ARM64=1)
-
+  find_package(fmt REQUIRED)
+  target_link_libraries(lemac PRIVATE fmt::fmt)
 else()
   message(FATAL_ERROR "unrecognized architecture ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
