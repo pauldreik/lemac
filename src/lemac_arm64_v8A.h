@@ -69,6 +69,14 @@ public:
 
 private:
   detail::LeMacContext m_context;
+  detail::ComboState m_state;
+
+  static constexpr std::size_t block_size = 64;
+
+  /// this is a buffer that keeps data between update() invocations,
+  /// in case data is provided in sizes not evenly divisible by the block size
+  std::array<std::uint8_t, block_size> m_buf{};
+  std::size_t m_bufsize{};
 };
 
 } // namespace lemac::inline v1

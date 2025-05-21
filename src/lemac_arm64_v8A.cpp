@@ -1,5 +1,6 @@
 #include "lemac_arm64_v8A.h"
 #include "lemac.h"
+#include <cassert>
 #include <fmt/core.h>
 #include <iostream>
 
@@ -122,7 +123,7 @@ void print(auto label, uint8x16_t x) {
   std::cout.flush();
 }
 
-uint8x16_t AES128(std::span<uint8x16_t, 11> roundkeys, uint8x16_t x) {
+uint8x16_t AES128(std::span<const uint8x16_t, 11> roundkeys, uint8x16_t x) {
   // see Algorithm 1 in FIPS-197
   print("input data", x);
   for (int round = 1; round < 10; ++round) {
@@ -141,6 +142,25 @@ uint8x16_t AES128(std::span<uint8x16_t, 11> roundkeys, uint8x16_t x) {
   return x;
 }
 
+uint8x16_t AES128_modified(std::span<const uint8x16_t, 11> roundkeys,
+                           uint8x16_t x) {
+  // see Algorithm 1 in FIPS-197
+  print("input data", x);
+  for (int round = 1; round < 10; ++round) {
+    // vaeseq_u8 is subbytes(shiftrows(a^b))
+    x = vaeseq_u8(x, roundkeys[round - 1]);
+    print("after addround, shiftrow, subbytes:", x);
+    // mixcolumns
+    x = vaesmcq_u8(x);
+    print("after mixcolumns", x);
+  }
+  // subbytes(shiftrows(addround))
+  x = vaeseq_u8(x, roundkeys[9]);
+  // mixcolumn instead of addround
+  x = vaesmcq_u8(x);
+  return x;
+}
+
 void init(std::span<const uint8_t, key_size> key, detail::LeMacContext& ctx) {
   uint8x16_t Ki[11];
   AES128_keyschedule(vld1q_u8(key.data()), Ki);
@@ -148,8 +168,96 @@ void init(std::span<const uint8_t, key_size> key, detail::LeMacContext& ctx) {
   //     0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d,
   //     0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34};
   // auto encrypted = AES128(Ki, vld1q_u8(input.data()));
+
+  // Kinit 0 --> 8
+  for (std::uint64_t i = 0; i < std::size(ctx.init.S); ++i) {
+    ctx.init.S[i] = AES128(
+        Ki, vreinterpretq_u8_u64(vcombine_u64(vcreate_u64(i), vcreate_u64(0))));
+  }
+
+  // Kinit 9 --> 26
+  for (std::uint64_t i = 0; i < std::size(ctx.subkeys); ++i) {
+    ctx.subkeys[i] = AES128(
+        Ki, vreinterpretq_u8_u64(vcombine_u64(
+                vcreate_u64(i + std::size(ctx.init.S)), vcreate_u64(0))));
+  }
+
+  // k2 27
+  AES128_keyschedule(AES128(Ki, vreinterpretq_u8_u64(vcombine_u64(
+                                    vcreate_u64(std::size(ctx.init.S) +
+                                                std::size(ctx.subkeys)),
+                                    vcreate_u64(0)))),
+                     ctx.keys[0]);
+
+  // k3 28
+  AES128_keyschedule(AES128(Ki, vreinterpretq_u8_u64(vcombine_u64(
+                                    vcreate_u64(std::size(ctx.init.S) +
+                                                std::size(ctx.subkeys) + 1),
+                                    vcreate_u64(0)))),
+                     ctx.keys[1]);
 }
 
+// does what _mm_aesenc_si128 does
+uint8x16_t aesenc(uint8x16_t v, uint8x16_t round_key) {
+  //_mm_aesenc_si128 does:
+  // round_key^mixcolumns(subbytes(shiftrows(v)))
+  // vaeseq_u8 is subbytes(shiftrows(a^b))
+  const uint8x16_t zero =
+      vreinterpretq_u8_u64(vcombine_u64(vcreate_u64(0), vcreate_u64(0)));
+  v = vaeseq_u8(v, zero);
+  v = vaesmcq_u8(v);
+  v = veorq_u8(v, round_key);
+  return v;
+}
+
+void process_block(detail::Sstate& S, detail::Rstate& R,
+                   const std::uint8_t* ptr) noexcept {
+  const auto M0 = vld1q_u8(ptr + 0);
+  const auto M1 = vld1q_u8(ptr + 16);
+  const auto M2 = vld1q_u8(ptr + 32);
+  const auto M3 = vld1q_u8(ptr + 48);
+
+  uint8x16_t T = S.S[8];
+  S.S[8] = aesenc(S.S[7], M3);
+  S.S[7] = aesenc(S.S[6], M1);
+  S.S[6] = aesenc(S.S[5], M1);
+  S.S[5] = aesenc(S.S[4], M0);
+
+  S.S[4] = aesenc(S.S[3], M0);
+  S.S[3] = aesenc(S.S[2], R.R1 ^ R.R2);
+  S.S[2] = aesenc(S.S[1], M3);
+  S.S[1] = aesenc(S.S[0], M3);
+  S.S[0] = S.S[0] ^ T ^ M2;
+  R.R2 = R.R1;
+  R.R1 = R.R0;
+  R.R0 = R.RR ^ M1;
+  R.RR = M2;
+}
+
+void process_zero_block(detail::Sstate& S, detail::Rstate& R) noexcept {
+  const uint8x16_t zero =
+      vreinterpretq_u8_u64(vcombine_u64(vcreate_u64(0), vcreate_u64(0)));
+  const auto M0 = zero;
+  const auto M1 = zero;
+  const auto M2 = zero;
+  const auto M3 = zero;
+
+  uint8x16_t T = S.S[8];
+  S.S[8] = aesenc(S.S[7], M3);
+  S.S[7] = aesenc(S.S[6], M1);
+  S.S[6] = aesenc(S.S[5], M1);
+  S.S[5] = aesenc(S.S[4], M0);
+
+  S.S[4] = aesenc(S.S[3], M0);
+  S.S[3] = aesenc(S.S[2], R.R1 ^ R.R2);
+  S.S[2] = aesenc(S.S[1], M3);
+  S.S[1] = aesenc(S.S[0], M3);
+  S.S[0] = S.S[0] ^ T /*^ M2*/;
+  R.R2 = R.R1;
+  R.R1 = R.R0;
+  R.R0 = R.RR /*^ M1*/;
+  R.RR = M2;
+}
 } // namespace
 
 LemacArm64v8A::LemacArm64v8A() noexcept : LemacArm64v8A(zeros) {}
@@ -162,10 +270,90 @@ std::unique_ptr<detail::ImplInterface> LemacArm64v8A::clone() const noexcept {
   return std::make_unique<LemacArm64v8A>(*this);
 }
 
-void LemacArm64v8A::update(std::span<const uint8_t> data) noexcept { return; }
+void LemacArm64v8A::update(std::span<const uint8_t> data) noexcept {
+
+  bool process_entire_m_buf = false;
+  std::size_t remaining_to_full_block;
+  if (m_bufsize != 0) {
+    // fill the remainder of m_buf from data and process a whole block if
+    // possible
+    assert(m_bufsize < block_size);
+    remaining_to_full_block = block_size - m_bufsize;
+    if (data.size() < remaining_to_full_block) {
+      // not enough data for a full block, append to the buffer and hope for
+      // better luck next time
+      std::memcpy(&m_buf[m_bufsize], data.data(), data.size());
+      m_bufsize += data.size();
+      return;
+    }
+    process_entire_m_buf = true;
+  }
+
+  // operate on a copy of the state and write it back later
+  auto state = m_state;
+
+  if (process_entire_m_buf) {
+    // process the entire block
+    std::memcpy(&m_buf[m_bufsize], data.data(), remaining_to_full_block);
+
+    process_block(state.s, state.r, m_buf.data());
+    m_bufsize = 0;
+    data = data.subspan(remaining_to_full_block);
+  }
+
+  // process whole blocks
+  const auto whole_blocks = data.size() / block_size;
+  const auto block_end = data.data() + whole_blocks * block_size;
+
+  auto ptr = data.data();
+
+  for (; ptr != block_end; ptr += block_size) {
+    process_block(state.s, state.r, ptr);
+  }
+  m_state = state;
+
+  // write the tail into m_buf
+  m_bufsize = data.size() - whole_blocks * block_size;
+  if (m_bufsize) {
+    std::memcpy(m_buf.data(), ptr, m_bufsize);
+  }
+}
 
 void LemacArm64v8A::finalize_to(std::span<const uint8_t> nonce,
-                                std::span<uint8_t, 16> target) noexcept {}
+                                std::span<uint8_t, 16> target) noexcept {
+  // let m_buf be padded
+  assert(m_bufsize < m_buf.size());
+  m_buf[m_bufsize] = 1;
+  for (std::size_t i = m_bufsize + 1; i < m_buf.size(); ++i) {
+    m_buf[i] = 0;
+  }
+
+  process_block(m_state.s, m_state.r, m_buf.data());
+
+  // Four final rounds to absorb message state
+  for (int i = 0; i < 4; ++i) {
+    process_zero_block(m_state.s, m_state.r);
+  }
+
+  assert(nonce.size() == 16);
+
+  const auto N = vld1q_u8(nonce.data());
+
+  auto& S = m_state.s;
+  uint8x16_t T = N ^ AES128(m_context.keys[0], N);
+  T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
+  T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
+  T ^= AES128_modified(m_context.get_subkey<2>(), S.S[2]);
+  T ^= AES128_modified(m_context.get_subkey<3>(), S.S[3]);
+  T ^= AES128_modified(m_context.get_subkey<4>(), S.S[4]);
+  T ^= AES128_modified(m_context.get_subkey<5>(), S.S[5]);
+  T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
+  T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
+  T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+
+  const auto tag = AES128(m_context.keys[1], T);
+  vst1q_u8(target.data(), tag);
+}
 
 std::array<uint8_t, 16>
 LemacArm64v8A::oneshot(std::span<const uint8_t> data,
