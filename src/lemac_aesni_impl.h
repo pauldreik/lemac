@@ -199,9 +199,9 @@ __m128i AES128_modified(std::span<const __m128i, 11> Ki, __m128i x) {
   x = _mm_aesenc_si128(x, Ki[5]);
   x = _mm_aesenc_si128(x, Ki[6]);
   x = _mm_aesenc_si128(x, Ki[7]);
-  x = _mm_aesenc_si128(x, Ki[8]);
-  x = _mm_aesenc_si128(x, Ki[9]);
-  x = _mm_aesenc_si128(x, _mm_set_epi64x(0, 0));
+  x = _mm_aesenc_si128(x, Ki[8]); //does Ki[8]^mixcolumn(subbytes(shiftrows(x)))
+  x = _mm_aesenc_si128(x, Ki[9]); // does Ki[9]^mixcolumn(subbytes(shiftrows(x)))
+  x = _mm_aesenc_si128(x, _mm_set_epi64x(0, 0)); // does mixcolumn(subbytes(shiftrows(x)))
   return x;
 }
 
@@ -215,8 +215,8 @@ __m128i AES128(std::span<const __m128i, 11> Ki, __m128i x) {
   x = _mm_aesenc_si128(x, Ki[6]);
   x = _mm_aesenc_si128(x, Ki[7]);
   x = _mm_aesenc_si128(x, Ki[8]);
-  x = _mm_aesenc_si128(x, Ki[9]);
-  x = _mm_aesenclast_si128(x, Ki[10]);
+  x = _mm_aesenc_si128(x, Ki[9]);// does Ki[9]^mixcolumn(subbytes(shiftrows(x)))
+  x = _mm_aesenclast_si128(x, Ki[10]); // does  K[10]^subbytes(shiftrows(x))
   return x;
 }
 

@@ -65,7 +65,6 @@ void AES128_keyschedule(const uint8x16_t K,
   // https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197-upd1.pdf
 
   // number of 32 bit words (4 for AES-128)
-  constexpr auto N = 4;
   constexpr auto Nk = 4;
 
   // number of round keys needed (11 for AES-128)
@@ -125,34 +124,34 @@ void print(auto label, uint8x16_t x) {
 
 uint8x16_t AES128(std::span<const uint8x16_t, 11> roundkeys, uint8x16_t x) {
   // see Algorithm 1 in FIPS-197
-  print("input data", x);
+  // print("input data", x);
   for (int round = 1; round < 10; ++round) {
     // vaeseq_u8 is subbytes(shiftrows(a^b))
     x = vaeseq_u8(x, roundkeys[round - 1]);
-    print("after addround, shiftrow, subbytes:", x);
-    // mixcolumns
+    // print("after addround, shiftrow, subbytes:", x);
+    //  mixcolumns
     x = vaesmcq_u8(x);
-    print("after mixcolumns", x);
+    // print("after mixcolumns", x);
   }
   // subbytes(shiftrows(addround))
   x = vaeseq_u8(x, roundkeys[9]);
   // addround
   x = veorq_u8(x, roundkeys[10]);
-  print("when finished", x);
+  // print("when finished", x);
   return x;
 }
 
 uint8x16_t AES128_modified(std::span<const uint8x16_t, 11> roundkeys,
                            uint8x16_t x) {
   // see Algorithm 1 in FIPS-197
-  print("input data", x);
+  // print("input data", x);
   for (int round = 1; round < 10; ++round) {
     // vaeseq_u8 is subbytes(shiftrows(a^b))
     x = vaeseq_u8(x, roundkeys[round - 1]);
-    print("after addround, shiftrow, subbytes:", x);
-    // mixcolumns
+    // print("after addround, shiftrow, subbytes:", x);
+    //  mixcolumns
     x = vaesmcq_u8(x);
-    print("after mixcolumns", x);
+    // print("after mixcolumns", x);
   }
   // subbytes(shiftrows(addround))
   x = vaeseq_u8(x, roundkeys[9]);
@@ -358,10 +357,19 @@ void LemacArm64v8A::finalize_to(std::span<const uint8_t> nonce,
 std::array<uint8_t, 16>
 LemacArm64v8A::oneshot(std::span<const uint8_t> data,
                        std::span<const uint8_t> nonce) const noexcept {
-  return {};
+  auto copy = *this;
+  copy.reset();
+  copy.update(data);
+  std::array<uint8_t, 16> ret;
+  copy.finalize_to(nonce, ret);
+  return ret;
 }
 
-void LemacArm64v8A::reset() noexcept {}
+void LemacArm64v8A::reset() noexcept {
+  m_state.s = m_context.init;
+  m_state.r.reset();
+  m_bufsize = 0;
+}
 
 std::unique_ptr<detail::ImplInterface> make_arm64_v8A() {
   return std::make_unique<LemacArm64v8A>();
@@ -371,5 +379,7 @@ std::unique_ptr<detail::ImplInterface>
 make_arm64_v8A(std::span<const uint8_t, key_size> key) {
   return std::make_unique<LemacArm64v8A>(key);
 }
+
+void detail::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
 
 } // namespace lemac::inline v1
