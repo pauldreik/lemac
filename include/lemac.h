@@ -1,14 +1,18 @@
+/*
+ * This is a C++ implementation of LeMac, based on the 2024 public domain
+ * implementation (CC0-1.0 license) by Augustin Bariant and Gaëtan Leurent.
+ *
+ * By Paul Dreik, https://www.pauldreik.se/
+ *
+ * https://github.com/pauldreik/lemac
+ * SPDX-License-Identifier: BSL-1.0
+ */
 #pragma once
 
 #include <array>
 #include <cstdint>
 #include <memory>
 #include <span>
-
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wignored-attributes"
-#endif
 
 namespace lemac::inline v1 {
 
@@ -22,6 +26,8 @@ class ImplInterface;
 
 /**
  * A cryptographic hash function designed by Augustin Bariant
+ *
+ * This class is copyable and moveable as if it was a value type.
  */
 class LeMac final {
 public:
@@ -121,11 +127,12 @@ private:
   /// zeros which can be used as a key or a nonce
   static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
+  /// the implementation is held by pointer:
+  /// - to dynamically pick the best version supported by the cpu, determined
+  ///  at runtime
+  /// - to hide implementation detail
+  /// - to have a small impact on compile time on user code
   std::unique_ptr<detail::ImplInterface> m_impl;
 };
-
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
 
 } // namespace lemac::inline v1
