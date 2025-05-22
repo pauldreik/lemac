@@ -31,6 +31,10 @@ To build and run the benchmark:
 
 This code runs with clang(>=16) and gcc (>=12) on amd64 linux. It requires C++20. It may work with earlier compiler versions, but those are not tested in CI.
 
+It should run on any amd64 cpu with aes support, which is most current desktop cpus.
+
+Support for arm64 is planned.
+
 # Usage
 
 ## Command line tool lemacsum
