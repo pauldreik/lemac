@@ -599,6 +599,12 @@ to_string(const typename lemac::AESNI<variant>::LeMacContext& context) {
     ret += to_string(k);
     ret.push_back('\n');
   }
+  ret += "subkeys:\n";
+  for (const auto& k : context.subkeys) {
+    ret += to_string(k);
+    ret.push_back('\n');
+  }
+
   return ret;
 }
 } // namespace
