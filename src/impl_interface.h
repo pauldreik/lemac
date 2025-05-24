@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+#include <string>
+#endif
 
 namespace lemac::inline v1 {
 
@@ -24,6 +27,10 @@ public:
           std::span<const std::uint8_t> nonce) const noexcept = 0;
 
   virtual void reset() noexcept = 0;
+
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+  virtual std::string get_internal_state() const noexcept = 0;
+#endif
 };
 
 } // namespace detail
