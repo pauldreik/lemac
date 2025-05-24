@@ -591,6 +591,16 @@ std::string
 to_string(const typename lemac::AESNI<variant>::LeMacContext& context) {
   std::string ret("context:\n");
   ret += to_string<variant>(context.init);
+  ret += "keys[0]:\n";
+  for (const auto& k : context.keys[0]) {
+    ret += to_string(k);
+    ret.push_back('\n');
+  }
+  ret += "keys[1]:\n";
+  for (const auto& k : context.keys[1]) {
+    ret += to_string(k);
+    ret.push_back('\n');
+  }
   return ret;
 }
 } // namespace
