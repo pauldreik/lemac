@@ -59,6 +59,13 @@ if(PROJECT_IS_TOP_LEVEL)
     add_compile_options(-fsanitize=address,undefined)
     add_link_options(-fsanitize=address,undefined)
   endif()
+  option(
+    LEMAC_INTERNAL_STATE_VISIBILITY
+    "enables an api to export the internal state of the hasher (for debugging/development purposes)"
+    Off)
+  if(LEMAC_INTERNAL_STATE_VISIBILITY)
+    target_compile_definitions(lemac PUBLIC LEMAC_INTERNAL_STATE_VISIBILITY)
+  endif()
   enable_testing()
   add_subdirectory(test)
   add_subdirectory(benchmark)

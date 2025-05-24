@@ -54,6 +54,22 @@ TEST_CASE("FIPS 107-upd1 AES-128 appendix A.1 test vectors") {
       0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
 
   lemac::LeMac lm(Key);
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+  auto s = lm.get_internal_state();
+  const auto expected = "context:\n"
+                        "S[9]:\n"
+                        "7df76b0c1ab899b33e42f047b91b546f\n"
+                        "7e59379b5233969d25a5ad2ce335cb3e\n"
+                        "1fb0c23bd209ac911ee3ab8a2d85ebcd\n"
+                        "c24bfea9b560ce46c787e9ed29e7160f\n"
+                        "cda43d7c6c56b627a96930a1f0b9916b\n"
+                        "c936b3351ac001f736169eb1a0b202c0\n"
+                        "2ef95bd96883ef6682c2de66c7763a24\n"
+                        "4c5a8bbf09e3c38c43573d56c33f83a9\n"
+                        "676a46366cdb5d282e2b55dfa073baa8\n"
+                        "";
+  REQUIRE(s == expected);
+#endif
 }
 
 TEST_CASE("empty input gives correct output") {

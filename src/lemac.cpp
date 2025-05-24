@@ -113,5 +113,10 @@ LeMac::oneshot(std::span<const uint8_t> data,
 }
 
 void LeMac::reset() noexcept { m_impl->reset(); }
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+std::string LeMac::get_internal_state() const noexcept {
+  return m_impl->get_internal_state();
+}
+#endif
 
 } // namespace lemac::inline v1

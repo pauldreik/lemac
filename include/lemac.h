@@ -13,6 +13,9 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+#include <string>
+#endif
 
 namespace lemac::inline v1 {
 
@@ -122,6 +125,14 @@ public:
    * efficent than creating a new object.
    */
   void reset() noexcept;
+
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+  /**
+   * for debugging/development. returns a text representation of the internal
+   * state
+   */
+  std::string get_internal_state() const noexcept;
+#endif
 
 private:
   /// zeros which can be used as a key or a nonce

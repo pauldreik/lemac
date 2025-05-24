@@ -66,7 +66,9 @@ public:
           std::span<const uint8_t> nonce) const noexcept override;
 
   void reset() noexcept override;
-
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+  std::string get_internal_state() const noexcept override;
+#endif
 private:
   detail::LeMacContext m_context;
   detail::ComboState m_state;
