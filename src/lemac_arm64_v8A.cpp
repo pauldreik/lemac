@@ -370,6 +370,43 @@ void LemacArm64v8A::reset() noexcept {
   m_state.r.reset();
   m_bufsize = 0;
 }
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+namespace {
+std::string to_string(const uint8x16_t x) {
+  std::array<unsigned char, 16> binary;
+  vst1q_u8(binary.data(), x);
+  std::string ret(32, '\0');
+  char buf[3];
+  for (std::size_t i = 0; auto c : binary) {
+    std::sprintf(buf, "%02x", c);
+    ret[i + 0] = buf[0];
+    ret[i + 1] = buf[1];
+    i += 2;
+  }
+  return ret;
+}
+
+std::string to_state(const detail::Sstate& sstate) {
+  std::string ret("S[9]:\n");
+  for (const auto& e : sstate.S) {
+    ret += to_string(e);
+    ret.push_back('\n');
+  }
+  return ret;
+}
+
+std::string to_state(const detail::LeMacContext& context) {
+  std::string ret("context:\n");
+  ret += to_state(context.init);
+  return ret;
+}
+} // namespace
+std::string LemacArm64v8A::get_internal_state() const noexcept {
+  std::string ret;
+  ret = to_state(m_context);
+  return ret;
+}
+#endif
 
 std::unique_ptr<detail::ImplInterface> make_arm64_v8A() {
   return std::make_unique<LemacArm64v8A>();

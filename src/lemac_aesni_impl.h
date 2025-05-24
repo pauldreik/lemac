@@ -151,6 +151,10 @@ template <AESNI_variant variant> struct AESNI {
      */
     void reset() noexcept override;
 
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+    std::string get_internal_state() const noexcept override;
+#endif
+
   private:
     /// zeros which can be used as a key or a nonce
     static constexpr std::array<const std::uint8_t, key_size> zeros{};
@@ -552,6 +556,52 @@ template <lemac::AESNI_variant variant>
 void lemac::AESNI<variant>::Rstate::reset() {
   std::memset(this, 0, sizeof(*this));
 }
+
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+namespace {
+std::string to_string(const __m128i x) {
+  std::array<unsigned char, sizeof(x)> binary;
+  _mm_storeu_si128((__m128i*)binary.data(), x);
+
+  std::string ret(32, '\0');
+  char buf[3];
+  for (std::size_t i = 0; auto c : binary) {
+    std::sprintf(buf, "%02x", c);
+    ret[i + 0] = buf[0];
+    ret[i + 1] = buf[1];
+    i += 2;
+  }
+  return ret;
+}
+
+template <lemac::AESNI_variant variant>
+std::string to_string(const typename lemac::AESNI<variant>::Sstate& s) {
+  std::string ret("S[9]:\n");
+  for (const auto& e : s.S) {
+    ret += to_string(e);
+    ret.push_back('\n');
+  }
+  return ret;
+}
+
+template <lemac::AESNI_variant variant>
+std::string
+to_string(const typename lemac::AESNI<variant>::LeMacContext& context) {
+  std::string ret("context:\n");
+  ret += to_string<variant>(context.init);
+  return ret;
+}
+} // namespace
+template <lemac::AESNI_variant variant>
+std::string
+lemac::AESNI<variant>::LeMacAESNI::get_internal_state() const noexcept {
+  std::string ret;
+
+  ret += to_string<variant>(m_context);
+
+  return ret;
+}
+#endif
 
 template <lemac::AESNI_variant variant>
 std::array<uint8_t, 16> lemac::AESNI<variant>::LeMacAESNI::oneshot(
