@@ -398,6 +398,16 @@ std::string to_state(const detail::Sstate& sstate) {
 std::string to_state(const detail::LeMacContext& context) {
   std::string ret("context:\n");
   ret += to_state(context.init);
+  ret += "keys[0]:\n";
+  for (const auto& k : context.keys[0]) {
+    ret += to_string(k);
+    ret.push_back('\n');
+  }
+  ret += "keys[1]:\n";
+  for (const auto& k : context.keys[1]) {
+    ret += to_string(k);
+    ret.push_back('\n');
+  }
   return ret;
 }
 } // namespace
