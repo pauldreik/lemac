@@ -14,6 +14,7 @@
 #include "lemac_aesni.h"
 #include "x86_capabilities.h"
 #elif defined(LEMAC_ARCH_IS_ARM64)
+#include "arm64_capabilities.h"
 #include "lemac_arm64.h"
 #else
 #error "unsupported architecture"
@@ -37,7 +38,12 @@ LeMac::LeMac() noexcept {
   }
 
 #elif defined(LEMAC_ARCH_IS_ARM64)
-  m_impl = make_arm64_v8A();
+  if (supports_arm64v8a_crypto()) {
+    m_impl = make_arm64_v8A();
+  } else {
+    // unsupported!
+    std::abort();
+  }
 #else
 #error "unsupported architecture"
 #endif
@@ -64,7 +70,12 @@ LeMac::LeMac(std::span<const uint8_t> key) {
     std::abort();
   }
 #elif defined(LEMAC_ARCH_IS_ARM64)
-  m_impl = make_arm64_v8A(right_size_key);
+  if (supports_arm64v8a_crypto()) {
+    m_impl = make_arm64_v8A(right_size_key);
+  } else {
+    // unsupported!
+    std::abort();
+  }
 #else
 #error "unsupported architecture"
 #endif
