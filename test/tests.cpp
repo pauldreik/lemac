@@ -54,6 +54,7 @@ TEST_CASE("FIPS 107-upd1 AES-128 appendix A.1 test vectors") {
       0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
 
   lemac::LeMac lm(Key);
+
 #ifdef LEMAC_INTERNAL_STATE_VISIBILITY
   auto s = lm.get_internal_state();
   const auto expected = "context:\n"
@@ -112,6 +113,19 @@ TEST_CASE("FIPS 107-upd1 AES-128 appendix A.1 test vectors") {
                         "6171cdf9eb7cb6c7b97f05ede6626e54\n"
                         "";
   REQUIRE(s == expected);
+
+  WHEN("update is called with no data") {
+    lm.update({});
+    THEN("the internal state is unchanged") {
+      REQUIRE(lm.get_internal_state() == expected);
+    }
+  }
+  WHEN("finalize is called") {
+    [[maybe_unused]] auto f = lm.finalize();
+    THEN("the internal state changes") {
+      REQUIRE(lm.get_internal_state() == expected);
+    }
+  }
 #endif
 }
 
