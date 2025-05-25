@@ -207,6 +207,18 @@ uint8x16_t aesenc(uint8x16_t v, uint8x16_t round_key) {
   return v;
 }
 
+// like aesenc, but with an implicit zero key
+uint8x16_t aesenc_zero(uint8x16_t v) {
+  //_mm_aesenc_si128 does:
+  // round_key^mixcolumns(subbytes(shiftrows(v)))
+  // vaeseq_u8 is subbytes(shiftrows(a^b))
+  const uint8x16_t zero =
+      vreinterpretq_u8_u64(vcombine_u64(vcreate_u64(0), vcreate_u64(0)));
+  v = vaeseq_u8(v, zero);
+  v = vaesmcq_u8(v);
+  return v;
+}
+
 void process_block(arm64v8detail::Sstate& S, arm64v8detail::Rstate& R,
                    const std::uint8_t* ptr) noexcept {
   const auto M0 = vld1q_u8(ptr + 0);
@@ -235,21 +247,21 @@ void process_zero_block(arm64v8detail::Sstate& S,
                         arm64v8detail::Rstate& R) noexcept {
   const uint8x16_t zero =
       vreinterpretq_u8_u64(vcombine_u64(vcreate_u64(0), vcreate_u64(0)));
-  const auto M0 = zero;
-  const auto M1 = zero;
+  // const auto M0 = zero;
+  // const auto M1 = zero;
   const auto M2 = zero;
-  const auto M3 = zero;
+  // const auto M3 = zero;
 
   uint8x16_t T = S.S[8];
-  S.S[8] = aesenc(S.S[7], M3);
-  S.S[7] = aesenc(S.S[6], M1);
-  S.S[6] = aesenc(S.S[5], M1);
-  S.S[5] = aesenc(S.S[4], M0);
+  S.S[8] = aesenc_zero(S.S[7]);
+  S.S[7] = aesenc_zero(S.S[6]);
+  S.S[6] = aesenc_zero(S.S[5]);
+  S.S[5] = aesenc_zero(S.S[4]);
 
-  S.S[4] = aesenc(S.S[3], M0);
+  S.S[4] = aesenc_zero(S.S[3]);
   S.S[3] = aesenc(S.S[2], R.R1 ^ R.R2);
-  S.S[2] = aesenc(S.S[1], M3);
-  S.S[1] = aesenc(S.S[0], M3);
+  S.S[2] = aesenc_zero(S.S[1]);
+  S.S[1] = aesenc_zero(S.S[0]);
   S.S[0] = S.S[0] ^ T /*^ M2*/;
   R.R2 = R.R1;
   R.R1 = R.R0;
