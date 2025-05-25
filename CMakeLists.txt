@@ -27,9 +27,11 @@ if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
       "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-maes;-mvaes;-mavx512f;-mavx512vl>>$<${msvc_cxx}:$<BUILD_INTERFACE:/arch:FIXME>>"
   )
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_AMD64=1)
-elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64)")
-  target_sources(lemac PRIVATE src/lemac_arm64_v8A.h src/lemac_arm64_v8A.cpp
-                               src/lemac_arm64.h)
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64|arm64)")
+  target_sources(
+    lemac
+    PRIVATE src/arm64_capabilities.cpp src/arm64_capabilities.h
+            src/lemac_arm64.h src/lemac_arm64_v8A.cpp src/lemac_arm64_v8A.h)
   # found out with gcc -march=native -Q --help=target |grep mcpu
   target_compile_options(lemac PRIVATE -mcpu=cortex-a76+crc+crypto)
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_ARM64=1)
