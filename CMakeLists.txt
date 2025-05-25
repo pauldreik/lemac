@@ -32,8 +32,16 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64|arm64)")
     lemac
     PRIVATE src/arm64_capabilities.cpp src/arm64_capabilities.h
             src/lemac_arm64.h src/lemac_arm64_v8A.cpp src/lemac_arm64_v8A.h)
-  # found out with gcc -march=native -Q --help=target |grep mcpu
-  target_compile_options(lemac PRIVATE -mcpu=cortex-a76+crc+crypto)
+
+  # we need the v8-A crypto extension. tests on a raspberry pi 5 reveals no
+  # significant changes in compiling with armv8-a, armv8.1-a, arm8.2-a (or
+  # cpu=a76+crypto which matches perfectly) so go with the most general.
+  set_source_files_properties(
+    src/lemac_arm64_v8A.cpp
+    PROPERTIES
+      COMPILE_OPTIONS
+      "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-march=armv8-a+aes>>$<${msvc_cxx}:$<BUILD_INTERFACE:>>"
+  )
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_ARM64=1)
   find_package(fmt REQUIRED)
   target_link_libraries(lemac PRIVATE fmt::fmt)
@@ -48,14 +56,14 @@ target_include_directories(lemac PUBLIC include)
 
 add_library(lemac_compiler_warnings INTERFACE)
 
-target_compile_options(
-  lemac_compiler_warnings
-  INTERFACE
-    "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-pedantic;-Wshadow;-Wunused>>"
-    "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>")
-target_link_libraries(lemac PUBLIC lemac_compiler_warnings)
-
 if(PROJECT_IS_TOP_LEVEL)
+  target_compile_options(
+    lemac_compiler_warnings
+    INTERFACE
+      "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-pedantic;-Wshadow;-Wunused>>"
+      "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>")
+  target_link_libraries(lemac PUBLIC lemac_compiler_warnings)
+
   option(LEMAC_SANITIZERS "enables sanitizers" Off)
   if(LEMAC_SANITIZERS)
     add_compile_options(-fsanitize=address,undefined)
