@@ -20,28 +20,27 @@ constexpr std::array<std::uint8_t, 256> calculate_sbox() {
   std::uint8_t p = 1;
   std::uint8_t q = 1;
 
-  /* loop invariant: p * q == 1 in the Galois field */
   do {
-    /* multiply p by 3 */
+    // multiply p by 3
     p = p ^ (p << 1) ^ (p & 0x80 ? 0x1B : 0);
 
-    /* divide q by 3 (equals multiplication by 0xf6) */
+    // divide q by 3 (equals multiplication by 0xf6)
     q ^= q << 1;
     q ^= q << 2;
     q ^= q << 4;
     q ^= q & 0x80 ? 0x09 : 0;
 
-    /* compute the affine transformation */
-    auto ROTL8 = [](auto x, auto shift) {
+    const auto ROTL8 = [](auto x, auto shift) {
       return (x << shift) | (x >> (8 - shift));
     };
+    // compute the affine transformation
     const std::uint8_t xformed =
         q ^ ROTL8(q, 1) ^ ROTL8(q, 2) ^ ROTL8(q, 3) ^ ROTL8(q, 4);
 
     sbox[p] = xformed ^ 0x63;
   } while (p != 1);
 
-  /* 0 is a special case since it has no inverse */
+  // 0 is a special case since it has no inverse
   sbox[0] = 0x63;
   return sbox;
 }
@@ -49,15 +48,17 @@ constexpr std::array<std::uint8_t, 256> calculate_sbox() {
 static constexpr std::array<std::uint8_t, 256> sbox = calculate_sbox();
 
 std::uint32_t ROTWORD(std::uint32_t x) { return std::rotl(x, 8); }
+
 std::uint32_t SUBWORD(std::uint32_t x) {
   return ((sbox[x >> 0 & 0xFF]) << 0) | ((sbox[x >> 8 & 0xFF]) << 8) |
          ((sbox[x >> 16 & 0xFF]) << 16) | ((sbox[x >> 24 & 0xFF]) << 24);
 }
+
 void AES128_keyschedule(const uint8x16_t K,
                         std::span<uint8x16_t, 11> roundkeys) {
 
   static_assert(std::endian::native == std::endian::little,
-                "code assumes little endian");
+                "the code assumes little endian");
 
   // following the notation on
   // https://en.wikipedia.org/wiki/AES_key_schedule#The_key_schedule
@@ -160,13 +161,10 @@ uint8x16_t AES128_modified(std::span<const uint8x16_t, 11> roundkeys,
   return x;
 }
 
-void init(std::span<const uint8_t, key_size> key, detail::LeMacContext& ctx) {
+void init(std::span<const uint8_t, key_size> key,
+          arm64v8detail::LeMacContext& ctx) {
   uint8x16_t Ki[11];
   AES128_keyschedule(vld1q_u8(key.data()), Ki);
-  // constexpr std::array<std::uint8_t, 16> input = {
-  //     0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d,
-  //     0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34};
-  // auto encrypted = AES128(Ki, vld1q_u8(input.data()));
 
   // Kinit 0 --> 8
   for (std::uint64_t i = 0; i < std::size(ctx.init.S); ++i) {
@@ -209,7 +207,7 @@ uint8x16_t aesenc(uint8x16_t v, uint8x16_t round_key) {
   return v;
 }
 
-void process_block(detail::Sstate& S, detail::Rstate& R,
+void process_block(arm64v8detail::Sstate& S, arm64v8detail::Rstate& R,
                    const std::uint8_t* ptr) noexcept {
   const auto M0 = vld1q_u8(ptr + 0);
   const auto M1 = vld1q_u8(ptr + 16);
@@ -233,7 +231,8 @@ void process_block(detail::Sstate& S, detail::Rstate& R,
   R.RR = M2;
 }
 
-void process_zero_block(detail::Sstate& S, detail::Rstate& R) noexcept {
+void process_zero_block(arm64v8detail::Sstate& S,
+                        arm64v8detail::Rstate& R) noexcept {
   const uint8x16_t zero =
       vreinterpretq_u8_u64(vcombine_u64(vcreate_u64(0), vcreate_u64(0)));
   const auto M0 = zero;
@@ -387,7 +386,7 @@ std::string to_string(const uint8x16_t x) {
   return ret;
 }
 
-std::string to_state(const detail::Sstate& sstate) {
+std::string to_state(const arm64v8detail::Sstate& sstate) {
   std::string ret("S[9]:\n");
   for (const auto& e : sstate.S) {
     ret += to_string(e);
@@ -396,7 +395,7 @@ std::string to_state(const detail::Sstate& sstate) {
   return ret;
 }
 
-std::string to_state(const detail::LeMacContext& context) {
+std::string to_state(const arm64v8detail::LeMacContext& context) {
   std::string ret("context:\n");
   ret += to_state(context.init);
   ret += "keys[0]:\n";
@@ -434,6 +433,6 @@ make_arm64_v8A(std::span<const uint8_t, key_size> key) {
   return std::make_unique<LemacArm64v8A>(key);
 }
 
-void detail::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
+void arm64v8detail::Rstate::reset() { std::memset(this, 0, sizeof(*this)); }
 
 } // namespace lemac::inline v1
