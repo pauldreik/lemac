@@ -7,7 +7,7 @@
 
 namespace lemac::inline v1 {
 
-namespace detail {
+namespace arm64v8detail {
 struct Sstate {
   uint8x16_t S[9];
 };
@@ -38,7 +38,7 @@ struct LeMacContext {
     return std::span<const uint8x16_t, 11>(subkeys + i, 11);
   }
 };
-} // namespace detail
+} // namespace arm64v8detail
 
 /**
  * implements lemac with Armv8A intrinsics
@@ -70,8 +70,8 @@ public:
   std::string get_internal_state() const noexcept override;
 #endif
 private:
-  detail::LeMacContext m_context;
-  detail::ComboState m_state;
+  arm64v8detail::LeMacContext m_context;
+  arm64v8detail::ComboState m_state;
 
   static constexpr std::size_t block_size = 64;
 
