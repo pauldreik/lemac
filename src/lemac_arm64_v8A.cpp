@@ -263,6 +263,7 @@ LemacArm64v8A::LemacArm64v8A() noexcept : LemacArm64v8A(zeros) {}
 
 LemacArm64v8A::LemacArm64v8A(std::span<const uint8_t, key_size> key) noexcept {
   init(key, m_context);
+  reset();
 }
 
 std::unique_ptr<detail::ImplInterface> LemacArm64v8A::clone() const noexcept {
