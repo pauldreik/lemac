@@ -6,8 +6,16 @@ Lemac is very interesting because it utilizes AES hardware acceleration which is
 
 It is based on the public domain code in [https://github.com/AugustinBariant/Implementations_LeMac_PetitMac/](https://github.com/AugustinBariant/Implementations_LeMac_PetitMac/) but has been heavily modified to use C++ and run clean with sanitizers.
 
+# TODO
+
+  * measure performance against openssl AES, xxh
+  * measure performance on aarch64
+  * write a fallback implementation
+  * test with valgrind in ci
 
 # Performance
+
+
 
 On an AMD zen4 system, the hashing speed is about 68 GB/s for larger (>100 kB) inputs. This can be compared to the non-cryptographic [xxh3/xxh128 hashes](https://xxhash.com/) which reach about 87 GB/s on the same hardware (measured with `xxhsum -b`). For bulk processing, it is slightly faster than the non-cryptographic [clhash](https://github.com/simdhash/clhash) which reaches 0.1 cycles per byte (measured on the same system, with it's provided benchmark).
 
