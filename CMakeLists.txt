@@ -60,9 +60,8 @@ target_compile_features(lemac PUBLIC cxx_std_20)
 target_include_directories(lemac PRIVATE src)
 target_include_directories(lemac PUBLIC include)
 
-add_library(lemac_compiler_warnings INTERFACE)
-
 if(PROJECT_IS_TOP_LEVEL)
+  add_library(lemac_compiler_warnings INTERFACE)
   target_compile_options(
     lemac_compiler_warnings
     INTERFACE
@@ -88,7 +87,6 @@ if(PROJECT_IS_TOP_LEVEL)
 
   add_executable(lemacsum src/main.cpp)
   target_link_libraries(lemacsum PRIVATE lemac)
-  target_link_libraries(lemacsum PUBLIC lemac_compiler_warnings)
 
   include(GNUInstallDirs)
   install(
