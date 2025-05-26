@@ -27,7 +27,7 @@ std::string tohex(std::span<const std::uint8_t> binary) {
   std::string ret;
   char buf[3];
   for (auto c : binary) {
-    std::sprintf(buf, "%02x", (unsigned char)c);
+    std::snprintf(buf, sizeof(buf), "%02x", (unsigned char)c);
     ret.append(buf);
   }
   return ret;
@@ -126,7 +126,11 @@ std::string checksum(lemac::LeMac& lemac, const std::string& filename) {
 
     const auto memory_map =
         mmapper(mmap(NULL, length, PROT_READ,
-                     MAP_FILE | MAP_PRIVATE | MAP_POPULATE, fd.m_fd, 0),
+                     MAP_FILE | MAP_PRIVATE
+#ifdef __linux__
+                     | MAP_POPULATE
+#endif
+                     , fd.m_fd, 0),
                 length);
     if (memory_map.m_addr == MAP_FAILED) {
 
