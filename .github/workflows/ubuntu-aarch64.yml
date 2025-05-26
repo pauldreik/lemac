@@ -57,6 +57,7 @@ jobs:
               cmake -GNinja -DCMAKE_CXX_COMPILER=${{matrix.CXX}} -B ${{github.workspace}}/build-$BUILD_TYPE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
               cmake --build ${{github.workspace}}/build-$BUILD_TYPE
               (cd ${{github.workspace}}/build-$BUILD_TYPE; ctest -C $BUILD_TYPE)
+              test/test_tool.sh ${{github.workspace}}/build-$BUILD_TYPE/lemacsum
             done
 
       - name: Show the artifact
