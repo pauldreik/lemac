@@ -31,6 +31,9 @@ class ImplInterface;
  * A cryptographic hash function designed by Augustin Bariant
  *
  * This class is copyable and moveable as if it was a value type.
+ *
+ * It is illegal to do anything to a moved from object other than destroying it
+ * or assigning to it.
  */
 class LeMac final {
 public:

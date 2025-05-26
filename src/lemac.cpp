@@ -8,6 +8,10 @@
  * SPDX-License-Identifier: BSL-1.0
  */
 
+#include <cassert>
+#include <cstdlib>   // std::abort
+#include <stdexcept> // std::runtime_error
+
 #include "lemac.h"
 
 #if defined(LEMAC_ARCH_IS_AMD64)
@@ -97,16 +101,19 @@ LeMac& LeMac::operator=(LeMac&& other) noexcept {
 LeMac::~LeMac() noexcept {}
 
 void LeMac::update(std::span<const uint8_t> data) noexcept {
+  assert(m_impl && "update(data) called on a moved from object!");
   m_impl->update(data);
 }
 
 std::array<uint8_t, 16> LeMac::finalize() noexcept {
+  assert(m_impl && "finalize() called on a moved from object!");
   std::array<std::uint8_t, 16> ret;
   finalize_to(zeros, ret);
   return ret;
 }
 
 std::array<uint8_t, 16> LeMac::finalize(std::span<const uint8_t> nonce) {
+  assert(m_impl && "finalize(nonce) called on a moved from object!");
   std::array<std::uint8_t, 16> ret;
   finalize_to(nonce, ret);
   return ret;
@@ -114,18 +121,25 @@ std::array<uint8_t, 16> LeMac::finalize(std::span<const uint8_t> nonce) {
 
 void LeMac::finalize_to(std::span<const uint8_t> nonce,
                         std::span<uint8_t, 16> target) noexcept {
+  assert(m_impl && "finalize(nonce, target) called on a moved from object!");
   m_impl->finalize_to(nonce, target);
 }
 
 std::array<uint8_t, 16>
 LeMac::oneshot(std::span<const uint8_t> data,
                std::span<const uint8_t> nonce) const noexcept {
+  assert(m_impl && "oneshot(data, nonce) called on a moved from object!");
   return m_impl->oneshot(data, nonce);
 }
 
-void LeMac::reset() noexcept { m_impl->reset(); }
+void LeMac::reset() noexcept {
+  assert(m_impl && "reset() called on a moved from object!");
+  m_impl->reset();
+}
+
 #ifdef LEMAC_INTERNAL_STATE_VISIBILITY
 std::string LeMac::get_internal_state() const noexcept {
+  assert(m_impl && "get_internal_state() called on a moved from object!");
   return m_impl->get_internal_state();
 }
 #endif
