@@ -7,18 +7,24 @@ set -eu
 me=$(basename "$0")
 rootdir=$(dirname "$0")/..
 
-builddir="$rootdir/build-tool-test"
-cmake -S "$rootdir" -B "$builddir"
-cmake --build "$builddir"
+if [ $# -eq 1 ]; then
+  # an existing build is to be tested (must be absolute)
+  tool="$1"
+  workdir=$rootdir/build-tool-test
+else
+  builddir="$rootdir/build-tool-test"
+  cmake -S "$rootdir" -B "$builddir" -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$builddir"
 
-# absolute path to the tool
-tooldir=$(
-  cd $builddir
-  pwd
-)
-tool="$tooldir/lemacsum"
+  # absolute path to the tool
+  tooldir=$(
+    cd $builddir
+    pwd
+  )
+  tool="$tooldir/lemacsum"
+  workdir="$builddir/workdir"
+fi
 
-workdir="$builddir/workdir"
 rm -rf "$workdir"
 mkdir -p "$workdir"
 
