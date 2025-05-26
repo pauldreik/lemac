@@ -41,6 +41,17 @@ Support for arm64 is planned.
 
 After compilation, there is a binary **lemacsum** which works in similar spirit to sha256sum, xxhsum,  b3sum etc.
 
+Generate a checksum:
+
+    $ lemacsum file |tee checksum
+    5351314614a6de5f31704434c083e7a9  file
+
+Verify a checksum:
+
+    $ lemacsum -c checksum
+    file: OK
+
+
 ## As a library
 
 Although yet untested, it should be possible to consume this as a cmake subproject.
