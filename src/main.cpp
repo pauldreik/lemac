@@ -76,7 +76,7 @@ std::string checksum(lemac::LeMac& lemac, const std::string& filename) {
   }
 
   // get the filesize and kind
-  struct stat statbuf{};
+  struct stat statbuf {};
   if (fstat(fd.m_fd, &statbuf) != 0) {
     std::cerr << "failed fstat for file " << filename << ", got error "
               << std::strerror(errno) << '\n';
