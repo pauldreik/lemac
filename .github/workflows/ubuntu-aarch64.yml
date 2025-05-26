@@ -27,18 +27,6 @@ jobs:
           # Not required, but speeds up builds
           githubToken: ${{ github.token }}
 
-          # Create an artifacts directory
-          setup: |
-            mkdir -p "${PWD}/artifacts"
-
-          # Mount the artifacts directory as /artifacts in the container
-          dockerRunArgs: |
-            --volume "${PWD}/artifacts:/artifacts"
-
-          # Pass some environment variables to the container
-          env: | # YAML, but pipe character is necessary
-            artifact_name: git-${{ matrix.distro }}_${{ matrix.arch }}
-
           # The shell to run commands with in the container
           shell: /bin/sh
 
