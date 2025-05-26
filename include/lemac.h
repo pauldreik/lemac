@@ -1,40 +1,60 @@
+/*
+ * This is a C++ implementation of LeMac, based on the 2024 public domain
+ * implementation (CC0-1.0 license) by Augustin Bariant and Gaëtan Leurent.
+ *
+ * By Paul Dreik, https://www.pauldreik.se/
+ *
+ * https://github.com/pauldreik/lemac
+ * SPDX-License-Identifier: BSL-1.0
+ */
 #pragma once
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <span>
-
-#include <immintrin.h>
-
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wignored-attributes"
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+#include <string>
 #endif
+
+namespace lemac::inline v1 {
+
+/// the size of the key in bytes
+static constexpr std::size_t key_size = 16;
+
+namespace detail {
+// items in this namespace are not part of the public api
+class ImplInterface;
+} // namespace detail
 
 /**
  * A cryptographic hash function designed by Augustin Bariant
+ *
+ * This class is copyable and moveable as if it was a value type.
+ *
+ * It is illegal to do anything to a moved from object other than destroying it
+ * or assigning to it.
  */
-class LeMac {
+class LeMac final {
 public:
-  /// the size of the key in bytes
-  static constexpr std::size_t key_size = 16;
-
   /**
-   * constructs a hasher with a correctly sized key
-   * @param key the key does not need to be aligned
+   * constructs a hasher with a zero key
    */
-  explicit LeMac(std::span<const std::uint8_t, key_size> key = std::span{
-                     zero_key}) noexcept;
+  LeMac() noexcept;
 
   /**
    * constructs a hasher with a correctly sized key, verified at runtime.
-   * If the size of the key is statically known to be correct, use the other
-   * constructor.
    *
    * @param key the key does not need to be aligned, but it must have the
-   * correct size. if not, an exception is thrown.
+   * correct size (lemac::key_size). if not, an exception is thrown.
    */
   explicit LeMac(std::span<const std::uint8_t> key);
+
+  LeMac(const LeMac& other) noexcept;
+  LeMac(LeMac&& other) noexcept;
+  LeMac& operator=(const LeMac& other) noexcept;
+  LeMac& operator=(LeMac&& other) noexcept;
+  ~LeMac() noexcept;
 
   /**
    * updates the hash with the provided data. this may be called zero or more
@@ -48,12 +68,26 @@ public:
   void update(std::span<const std::uint8_t> data) noexcept;
 
   /**
+   * finalizes the hash with a zero nonce and returns the result
+   * @return
+   */
+  std::array<std::uint8_t, 16> finalize() noexcept;
+
+  /**
    * finalizes the hash and returns the result
    * @param nonce does not need to be aligned
    * @return
    */
-  std::array<std::uint8_t, 16>
-  finalize(std::span<const std::uint8_t> nonce = std::span{zero_key});
+  std::array<std::uint8_t, 16> finalize(std::span<const std::uint8_t> nonce);
+
+  /**
+   * finalizes the hash and writes the result into the provided target, using a
+   * zero nonce.
+   * @param target does not need to be aligned
+   */
+  void finalize_to(std::span<std::uint8_t, 16> target) noexcept {
+    finalize_to(zeros, target);
+  }
 
   /**
    * finalizes the hash and writes the result into the provided target
@@ -64,17 +98,30 @@ public:
                    std::span<std::uint8_t, 16> target) noexcept;
 
   /**
-   * hashes with the provided data and then finalizes the hash.
-   * this is more efficient than update()+finalize() and should be preferred
-   * when all data is known upfront.
+   * hashes with the provided data and then finalizes the hash, using a zero
+   * nonce. this is more efficient than update()+finalize() and should be
+   * preferred when all data is known upfront.
+   *
+   * @param data does not need to be aligned
+   * @return the lemac hash
+   */
+  std::array<std::uint8_t, 16>
+  oneshot(std::span<const std::uint8_t> data) const noexcept {
+    return oneshot(data, zeros);
+  }
+
+  /**
+   * hashes with the provided data and then finalizes the hash with the given
+   * nonce. this is more efficient than update()+finalize() and should be
+   * preferred when all data is known upfront.
    *
    * @param data does not need to be aligned
    * @param nonce does not need to be aligned
-   * @return
+   * @return the lemac hash
    */
-  std::array<std::uint8_t, 16> oneshot(
-      std::span<const std::uint8_t> data,
-      std::span<const std::uint8_t> nonce = std::span{zero_key}) const noexcept;
+  std::array<std::uint8_t, 16>
+  oneshot(std::span<const std::uint8_t> data,
+          std::span<const std::uint8_t> nonce) const noexcept;
 
   /**
    * resets the object as if it had been newly constructed. this is more
@@ -82,54 +129,24 @@ public:
    */
   void reset() noexcept;
 
-  static constexpr std::array<const std::uint8_t, key_size> zero_key{};
-
-  struct Sstate {
-    __m128i S[9];
-  };
-
-  struct Rstate {
-    void reset();
-    __m128i RR;
-    __m128i R0;
-    __m128i R1;
-    __m128i R2;
-  };
-
-  // this is the state that changes during absorption of data
-  struct ComboState {
-    Sstate s;
-    Rstate r;
-  };
-
-  // this is inited on lemac construction and not changed after
-  struct LeMacContext {
-    Sstate init;
-    __m128i keys[2][11];
-    __m128i subkeys[18];
-
-    template <std::size_t i>
-      requires(i >= 0 && i <= 8)
-    std::span<const __m128i, 11> get_subkey() const {
-      return std::span<const __m128i, 11>(subkeys + i, 11);
-    }
-  };
+#ifdef LEMAC_INTERNAL_STATE_VISIBILITY
+  /**
+   * for debugging/development. returns a text representation of the internal
+   * state
+   */
+  std::string get_internal_state() const noexcept;
+#endif
 
 private:
-  void init(std::span<const std::uint8_t, key_size> key) noexcept;
-  static constexpr std::size_t block_size = 64;
+  /// zeros which can be used as a key or a nonce
+  static constexpr std::array<const std::uint8_t, key_size> zeros{};
 
-  void tail(const LeMacContext& context, Sstate& state,
-            std::span<const std::uint8_t> nonce,
-            std::span<std::uint8_t, 16> target) const noexcept;
-  LeMacContext m_context;
-  ComboState m_state;
-  /// this is a buffer that keeps data between update() invocations,
-  /// in case data is provided in sizes not evenly divisible by the block size
-  std::array<std::uint8_t, block_size> m_buf{};
-  std::size_t m_bufsize{};
+  /// the implementation is held by pointer:
+  /// - to dynamically pick the best version supported by the cpu, determined
+  ///  at runtime
+  /// - to hide implementation detail
+  /// - to have a small impact on compile time on user code
+  std::unique_ptr<detail::ImplInterface> m_impl;
 };
 
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
+} // namespace lemac::inline v1

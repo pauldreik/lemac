@@ -34,7 +34,10 @@ jobs:
     - name: Build
       run: cmake --build ${{github.workspace}}/build-${{matrix.BUILD_TYPE}} --config ${{matrix.BUILD_TYPE}}
 
-    - name: Test
+    - name: Unit test
       working-directory: ${{github.workspace}}/build-${{matrix.BUILD_TYPE}}
       run: ctest -C ${{matrix.BUILD_TYPE}}
 
+    - name: Tool test "lemacsum"
+      working-directory: ${{github.workspace}}
+      run: test/test_tool.sh ${{github.workspace}}/build-${{matrix.BUILD_TYPE}}/lemacsum

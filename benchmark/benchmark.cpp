@@ -1,7 +1,13 @@
+/*
+ * By Paul Dreik, https://www.pauldreik.se/
+ *
+ * https://github.com/pauldreik/lemac
+ * SPDX-License-Identifier: BSL-1.0
+ */
 #include <chrono>
 #include <vector>
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <lemac.h>
 
@@ -38,7 +44,7 @@ struct results {
 };
 
 results hash(const options& opt) {
-  LeMac lemac;
+  lemac::LeMac lemac;
 
   std::vector<std::uint8_t> data(opt.hashsize);
 
@@ -79,8 +85,8 @@ void run_testcase(const options& opt) {
   const auto speed = hash(opt);
   fmt::print("with {:7} byte at a time and strategy {:20}: ", opt.hashsize,
              to_string(opt.strategy));
-  fmt::println("hashed with {:6.03f} GiB/s {:6.03f} µs/hash",
-               speed.data_rate() * 1e-9, speed.hash_rate() * 1e6);
+  fmt::print("hashed with {:6.03f} GiB/s {:6.03f} µs/hash\n",
+             speed.data_rate() * 1e-9, speed.hash_rate() * 1e6);
 }
 
 auto get_compiler() {
@@ -88,6 +94,10 @@ auto get_compiler() {
   return "clang";
 #elif defined(__GNUC__)
   return "gcc";
+#elif defined(_MSC_VER)
+  return "msvc";
+#else
+  return "unknown";
 #endif
 }
 
@@ -103,6 +113,6 @@ void run_all() {
 }
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
-  fmt::println("compiler: {}", get_compiler());
+  fmt::print("compiler: {}\n", get_compiler());
   run_all();
 }
