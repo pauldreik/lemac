@@ -1,3 +1,9 @@
+/*
+ * By Paul Dreik, https://www.pauldreik.se/
+ *
+ * https://github.com/pauldreik/lemac
+ * SPDX-License-Identifier: BSL-1.0
+ */
 #include "lemac_aesni.h"
 #include "lemac_aesni_impl.h"
 

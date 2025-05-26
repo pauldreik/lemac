@@ -1,3 +1,9 @@
+/*
+ * By Paul Dreik, https://www.pauldreik.se/
+ *
+ * https://github.com/pauldreik/lemac
+ * SPDX-License-Identifier: BSL-1.0
+ */
 #include <cassert>
 #include <cstdint>
 #include <numeric>
