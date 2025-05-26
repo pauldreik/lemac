@@ -8,7 +8,7 @@ cd "$(dirname "$0")"/..
 
 # apt install cmake-format
 cmake-format -i \
-	     CMakeLists.txt \
-	     benchmark/CMakeLists.txt \
-	     test/CMakeLists.txt \
-    ;
+  CMakeLists.txt \
+  benchmark/CMakeLists.txt \
+  test/CMakeLists.txt \
+  ;
