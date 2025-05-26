@@ -59,9 +59,3 @@ jobs:
               (cd ${{github.workspace}}/build-$BUILD_TYPE; ctest -C $BUILD_TYPE)
               test/test_tool.sh ${{github.workspace}}/build-$BUILD_TYPE/lemacsum
             done
-
-      - name: Show the artifact
-        # Items placed in /artifacts in the container will be in
-        # ${PWD}/artifacts on the host.
-        run: |
-          ls -al "${PWD}/artifacts"
