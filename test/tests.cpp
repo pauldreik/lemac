@@ -39,8 +39,10 @@ namespace {
 std::string tohex(std::span<const std::uint8_t> binary) {
   std::string ret;
   char buf[3];
-  for (auto c : binary) {
-    std::sprintf(buf, "%02x", (unsigned char)c);
+  for (const auto c : binary) {
+    [[maybe_unused]] const auto nwritten =
+        std::snprintf(buf, sizeof(buf), "%02x", (unsigned char)c);
+    assert(nwritten == 2);
     ret.append(buf);
   }
   return ret;
