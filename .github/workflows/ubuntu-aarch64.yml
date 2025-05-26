@@ -52,7 +52,6 @@ jobs:
                 ;;
             esac
 
-          # Produce a binary artifact and place it in the mounted volume
           run: |
             for BUILD_TYPE in Debug Release; do
               cmake -GNinja -DCMAKE_CXX_COMPILER=${{matrix.CXX}} -B ${{github.workspace}}/build-$BUILD_TYPE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
