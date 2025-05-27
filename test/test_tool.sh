@@ -8,8 +8,15 @@ me=$(basename "$0")
 rootdir=$(dirname "$0")/..
 
 if [ $# -eq 1 ]; then
-  # an existing build is to be tested (must be absolute)
-  tool="$1"
+  # an existing build is to be tested (can be relative or absolute)
+  # Convert to absolute path
+  if [[ "$1" = /* ]]; then
+    # Already absolute
+    tool="$1"
+  else
+    # Relative path - make it absolute
+    tool="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+  fi
   workdir=$rootdir/build-tool-test
 else
   builddir="$rootdir/build-tool-test"
