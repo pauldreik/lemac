@@ -4,13 +4,14 @@ This is a C++ implementation of the [lemac cryptographic hash](https://doi.org/1
 
 Lemac is very interesting because it utilizes AES hardware acceleration which is very common.
 
-It is based on the public domain code in [https://github.com/AugustinBariant/Implementations_LeMac_PetitMac/](https://github.com/AugustinBariant/Implementations_LeMac_PetitMac/) but has been heavily modified to use C++ and run clean with sanitizers.
+The AESNI implementation is based on the public domain code in [https://github.com/AugustinBariant/Implementations_LeMac_PetitMac/](https://github.com/AugustinBariant/Implementations_LeMac_PetitMac/) but has been heavily modified to use C++ and run clean with sanitizers.
 
 # Performance
 
 The bulk speed on a single core is up to about
 
   * 77 GiB/s, 0.067 cycles per byte (AMD zen 4, Debian 13 Trixie)
+  * 44 GiB/s (Apple M3 MacBook Air, macos) 
   * 11 GiB/s, 0.19 cycles per byte (raspberry pi 5, Ubuntu 24.04)
 
 The speed is measured with the included benchmark and using `perf stat` to get the average clock frequency during the test. To build and run the benchmark:
@@ -46,7 +47,25 @@ This can be compared with some other interesting hashes
 
 The AES performance, as measured by `openssl speed -evp AES-128-ECB` is about 16.4 GiB/s.
 
-## Results on raspberry pi 5
+## Results on a Apple M3 MacBook Air
+
+Here are the results from a single run with default power settings plugged in to the charger, if that matters. There is some run to run variation, take this with a grain of salt.
+
+```
+compiler: clang
+with       1 byte at a time and strategy update_and_finalize : hashed with  0.042 GiB/s  0.024 µs/hash
+with    1024 byte at a time and strategy update_and_finalize : hashed with 24.588 GiB/s  0.042 µs/hash
+with   16384 byte at a time and strategy update_and_finalize : hashed with 42.378 GiB/s  0.387 µs/hash
+with  262144 byte at a time and strategy update_and_finalize : hashed with 43.691 GiB/s  6.000 µs/hash
+with 1048576 byte at a time and strategy update_and_finalize : hashed with 43.854 GiB/s 23.911 µs/hash
+with       1 byte at a time and strategy oneshot             : hashed with  0.021 GiB/s  0.049 µs/hash
+with    1024 byte at a time and strategy oneshot             : hashed with 16.297 GiB/s  0.063 µs/hash
+with   16384 byte at a time and strategy oneshot             : hashed with 39.348 GiB/s  0.416 µs/hash
+with  262144 byte at a time and strategy oneshot             : hashed with 43.242 GiB/s  6.062 µs/hash
+with 1048576 byte at a time and strategy oneshot             : hashed with 43.577 GiB/s 24.062 µs/hash
+```
+
+## Results on Raspberry Pi 5
 
 This was measured on Ubuntu 24.04. Unfortunately, this was measured with insufficient cooling and the average clock speed was 2.263 GHz according to perf stat.
 
@@ -65,7 +84,9 @@ This code runs with clang(>=16) and gcc (>=12) on amd64 linux. It requires C++20
 
 It should run on any amd64 cpu with aes support, which is most current desktop cpus. It does dynamic dispatch to select between AES-NI and VAES.
 
-It also runs on arm64 with AES support (like the raspberryn pi 5, but not earlier versions).
+It also runs on arm64 with AES support:
+ * raspberry pi 5 (but not earlier versions)
+ * apple M1/M2/M3 cpus (of these, only M3 has been tested)
 
 Support for other platforms is planned, by providing a non-accelerated fallback.
 

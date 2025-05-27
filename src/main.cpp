@@ -124,14 +124,14 @@ std::string checksum(lemac::LeMac& lemac, const std::string& filename) {
     assert(statbuf.st_size > 0);
     const auto length = static_cast<size_t>(statbuf.st_size);
 
-    const auto memory_map =
-        mmapper(mmap(NULL, length, PROT_READ,
-                     MAP_FILE | MAP_PRIVATE
+    const auto memory_map = mmapper(mmap(NULL, length, PROT_READ,
+                                         MAP_FILE | MAP_PRIVATE
 #ifdef __linux__
-                     | MAP_POPULATE
+                                             | MAP_POPULATE
 #endif
-                     , fd.m_fd, 0),
-                length);
+                                         ,
+                                         fd.m_fd, 0),
+                                    length);
     if (memory_map.m_addr == MAP_FAILED) {
 
       std::cerr << "failed memory mapping file " << filename << ", got errno "
