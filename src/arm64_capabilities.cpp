@@ -5,6 +5,10 @@
 #include <sys/auxv.h>
 #endif
 
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
 namespace {
 
 bool aes_support_impl() {
@@ -13,6 +17,10 @@ bool aes_support_impl() {
   // https://community.arm.com/arm-community-blogs/b/operating-systems-blog/posts/runtime-detection-of-cpu-features-on-an-armv8-a-cpu
   const auto hwcaps = getauxval(AT_HWCAP);
   return (hwcaps & HWCAP_AES) == HWCAP_AES;
+#elif defined(__APPLE__)
+  // All Apple Silicon Macs have AES crypto extensions
+  // M1, M2, M3 all support ARMv8.5-A which includes AES
+  return true;
 #else
 #error "unsupported implementation, fix me!"
 #endif

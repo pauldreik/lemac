@@ -1,0 +1,68 @@
+name: macOS
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-13, macos-14]  # Intel and Apple Silicon
+        BUILD_TYPE: [Debug, Release]
+        include:
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@v7
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Setup vcpkg
+      run: |
+        git clone https://github.com/Microsoft/vcpkg.git
+        ./vcpkg/bootstrap-vcpkg.sh
+        echo "VCPKG_ROOT=$PWD/vcpkg" >> $GITHUB_ENV
+
+    - name: Install dependencies
+      run: |
+        # Ninja is often pre-installed, but ensure it's available
+        brew install ninja || true
+
+    - name: Configure CMake
+      run: |
+        cmake -B build-${{matrix.BUILD_TYPE}} \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{matrix.BUILD_TYPE}} \
+          -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+          -DLEMAC_SANITIZERS=${{ matrix.BUILD_TYPE == 'Debug' && 'ON' || 'OFF' }}
+
+    - name: Build
+      run: cmake --build build-${{matrix.BUILD_TYPE}}
+
+    - name: Unit test
+      run: ctest --test-dir build-${{matrix.BUILD_TYPE}} -V
+
+    - name: Tool test "lemacsum"
+      run: test/test_tool.sh build-${{matrix.BUILD_TYPE}}/lemacsum
+
+    - name: Run benchmarks (Release only)
+      if: matrix.BUILD_TYPE == 'Release'
+      run: |
+        echo "Running benchmarks on ${{ matrix.arch }}..."
+        ./build-${{matrix.BUILD_TYPE}}/benchmark/benchmark
