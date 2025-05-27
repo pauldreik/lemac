@@ -41,8 +41,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        brew install ninja
-        $VCPKG_ROOT/vcpkg install fmt catch2
+        # Ninja is often pre-installed, but ensure it's available
+        brew install ninja || true
 
     - name: Configure CMake
       run: |
