@@ -109,7 +109,37 @@ Verify a checksum:
 
 ## As a library
 
-Although yet untested, it should be possible to consume this as a cmake subproject.
+To use this from cmake, add the following snippet to your CMakeLists.txt:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  lemac
+  GIT_REPOSITORY https://github.com/pauldreik/lemac.git
+  GIT_TAG        main
+)
+FetchContent_MakeAvailable(lemac)
+target_link_libraries(my_executable PRIVATE lemac)
+```
+
+and in your code, using fmt for the nice printout:
+
+```cpp
+#include <string>
+#include <fmt/ranges.h>
+#include "lemac.h"
+
+int main()
+{
+  std::string message("hello");
+  lemac::LeMac lm;
+  const auto hash = lm.oneshot(
+      std::span((const std::uint8_t*)message.data(), message.size()));
+
+  fmt::println("the hash of {} is {:02x}", message, fmt::join(hash, ""));
+  // prints "the hash of hello is b2e64fbf9da60940f54a4cd3ee07c37d"
+}
+```
 
 # License
 
