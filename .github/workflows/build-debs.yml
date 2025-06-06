@@ -1,0 +1,68 @@
+name: build and use debs
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-debs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jtdor/build-deb-action@v1
+        with:
+          buildpackage-opts: --build=binary --no-sign
+          docker-image: debian:trixie-slim
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debs
+          path: |
+            debian/artifacts/*.deb
+  test-tool:
+    runs-on: ubuntu-latest
+    needs: build-debs
+    container:
+      image: debian:trixie
+    steps:
+      - name: download debs
+        uses: actions/download-artifact@v4
+        with:
+          name: debs
+      - shell: bash
+        name: install cmdline tool and verify it works
+        run: |
+          ls -l
+          pwd
+          dpkg -i lemac_*.deb liblemac0_*.deb || apt -f install --yes
+          which lemacsum
+          lemacsum --help
+          lemacsum *deb
+      - name: check that the man page is installed
+        run: |
+          apt update
+          apt install --yes man-db
+          man -t lemacsum >/dev/null
+  test-dev:
+    runs-on: ubuntu-latest
+    needs: build-debs
+    container:
+      image: debian:trixie-slim
+      volumes:
+        - ${{github.workspace}}:/src
+    steps:
+      - uses: actions/checkout@v4
+      - name: download debs
+        uses: actions/download-artifact@v4
+        with:
+          name: debs
+      - shell: bash
+        name: install dev package and verify it works
+        run: |
+          dpkg -i liblemac-dev_*.deb liblemac0_*.deb || apt -f install --yes
+          apt update
+          apt install --yes cmake g++ ninja-build
+          cmake -S examples/use_with_cmake_install -B /tmp/build -GNinja
+          cmake --build /tmp/build
+          /tmp/build/executable
