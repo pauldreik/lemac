@@ -1,0 +1,9 @@
+.debhelper/
+debhelper-build-stamp
+files
+*.log
+*.substvars
+lemac/
+liblemac-dev/
+liblemac0/
+tmp/

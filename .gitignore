@@ -1,3 +1,4 @@
 CMakeLists.txt.user
 build-tool-test/
 build/
+obj-*/
