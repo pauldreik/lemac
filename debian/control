@@ -1,0 +1,47 @@
+Source: lemac
+Section: utils
+Priority: optional
+Maintainer: Paul Dreik <github@pauldreik.se>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ catch2,
+ libfmt-dev,
+Standards-Version: 4.7.2
+Homepage: https://github.com/pauldreik/lemac
+Vcs-Browser: https://github.com/pauldreik/lemac
+Vcs-Git: https://github.com/pauldreik/lemac.git
+
+Package: lemac
+Architecture: any
+Depends:
+ liblemac0(>= ${binary:Version}),
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: lemac cryptographic checksum
+ This is an implementation of the lemac cryptographic checksum
+ suggested by Augustin Bariant. It provides a command
+ line utility lemacsum that works similarly to other checksum
+ utilities like sha1sum, sha256sum, xxhsum and b3sum.
+
+Package: liblemac0
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Multi-Arch: same
+Description: shared library for lemac
+ Lemac checksum.
+ .
+ This package contains the shared library.
+
+Package: liblemac-dev
+Architecture: any
+Section: libdevel
+Depends: liblemac0 (= ${binary:Version}), ${misc:Depends}
+Multi-Arch: same
+Description: header files and a static library for libxxhash
+ lemac checksum.
+ .
+ This package contains xxHash static library and header files.
+

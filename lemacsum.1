@@ -1,0 +1,33 @@
+.de URL
+\\$2 \(laURL: \\$1 \(ra\\$3
+..
+.if \n[.g] .mso www.tmac
+.TH lemac 1 2025-06-02 "lemac 0.0"
+.SH NAME
+lemacsum \- print or check lemac checksums
+.
+.SH SYNOPSIS
+.B lemacsum [OPTION]... [FILE]...
+.P
+lemacsum calculates lemac 128-bit cryptographic checksums.
+It works similarly to other commonly used checksum programs like sha1sum, sha256sum, xxhsum and b3sum.
+.P
+.SS Generating/printing checksums
+Checksums are generated for all the supplied files and written to stdout, one checksum per line.
+If no file is given, data is read from stdin. The special placeholder "-" can also be used
+to read from stdin.
+.
+.P
+.SS Verifying/checking checksums
+The -c/--check option is used to verify checksums. The checksums are read from the supplied
+file, using stdin in case no file is given.
+.SH DESCRIPTION
+lemacsum is a utility for calculating the 128-bit lemac cryptographic checksum, designed by Augustin Bariant.
+See
+.URL "https://doi.org/10.46586/tosc.v2024.i2.35-67"
+for a description of the algorithm.
+.
+.SH AUTHOR
+Copyright \(co 2025 Paul Dreik
+.br
+.URL "https://github.com/pauldreik/lemac"

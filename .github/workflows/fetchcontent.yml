@@ -1,0 +1,23 @@
+name: test cmake fetchcontent
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: build example project with fetchcontent
+      working-directory: ${{github.workspace}}/examples/use_with_fetchcontent
+      run: |
+        cmake -B /tmp/build -S . -DGIT_REPOSITORY="file://${{github.workspace}}" -DGIT_BRANCH=${{ github.sha }}
+        cmake --build /tmp/build
+        /tmp/build/executable |tee output.txt
+        grep -q b2e64fbf9da60940f54a4cd3ee07c37d output.txt
+

@@ -4,14 +4,25 @@
 
 # SPDX-License-Identifier: BSL-1.0
 
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.23)
 
 project(lemac LANGUAGES CXX)
 
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang,GNU>")
 set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 
-add_library(lemac include/lemac.h src/impl_interface.h src/lemac.cpp)
+add_library(lemac src/impl_interface.h src/lemac.cpp)
+
+target_sources(
+  lemac
+  PUBLIC FILE_SET
+         public_headers
+         TYPE
+         HEADERS
+         BASE_DIRS
+         include
+         FILES
+         include/lemac.h)
 
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
   target_sources(
@@ -58,7 +69,6 @@ endif()
 add_library(lemac::lemac ALIAS lemac)
 target_compile_features(lemac PUBLIC cxx_std_20)
 target_include_directories(lemac PRIVATE src)
-target_include_directories(lemac PUBLIC include)
 
 if(PROJECT_IS_TOP_LEVEL)
   add_library(lemac_compiler_warnings INTERFACE)
@@ -81,16 +91,30 @@ if(PROJECT_IS_TOP_LEVEL)
   if(LEMAC_INTERNAL_STATE_VISIBILITY)
     target_compile_definitions(lemac PUBLIC LEMAC_INTERNAL_STATE_VISIBILITY)
   endif()
-  enable_testing()
-  add_subdirectory(test)
-  add_subdirectory(benchmark)
 
-  add_executable(lemacsum src/main.cpp)
-  target_link_libraries(lemacsum PRIVATE lemac)
+  option(LEMAC_BUILD_TESTING "enables lemac unit tests" On)
+  if(LEMAC_BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(test)
+  endif()
+
+  option(LEMAC_BUILD_BENCHMARK "enables lemac benchmark" On)
+  if(LEMAC_BUILD_BENCHMARK)
+    add_subdirectory(benchmark)
+  endif()
 
   include(GNUInstallDirs)
+
+  option(LEMAC_BUILD_TOOL "enables lemac command line tool lemacsum" On)
+  if(LEMAC_BUILD_TOOL)
+    add_executable(lemacsum src/main.cpp)
+    target_link_libraries(lemacsum PRIVATE lemac)
+    # install(FILES lemacsum.1 TYPE MAN)
+    install(TARGETS lemacsum RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  endif()
+
   install(
-    TARGETS lemacsum
+    TARGETS lemac
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} FILE_SET public_headers)
+endif() # PROJECT_IS_TOP_LEVEL
