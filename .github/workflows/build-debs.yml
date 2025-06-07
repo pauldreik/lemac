@@ -58,11 +58,20 @@ jobs:
         with:
           name: debs
       - shell: bash
-        name: install dev package and verify it works
+        name: install dev package and compiler
         run: |
           dpkg -i liblemac-dev_*.deb liblemac0_*.deb || apt -f install --yes
           apt update
           apt install --yes cmake g++ ninja-build
-          cmake -S examples/use_with_cmake_install -B /tmp/build -GNinja
-          cmake --build /tmp/build
-          /tmp/build/executable
+      - shell: bash
+        name: verify use example with explicit filename
+        run: |
+          cmake -S examples/use_with_explicit_filename -B /tmp/build-direct -GNinja
+          cmake --build /tmp/build-direct
+          /tmp/build-direct/executable
+      - shell: bash
+        name: verify use example with find_package
+        run: |
+          cmake -S examples/use_with_findpackage/ -B /tmp/build-find-package -GNinja
+          cmake --build /tmp/build-find-package
+          /tmp/build-find-package/executable
