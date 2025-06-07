@@ -6,7 +6,10 @@
 
 cmake_minimum_required(VERSION 3.23)
 
-project(lemac LANGUAGES CXX)
+project(
+  lemac
+  VERSION 0.0
+  LANGUAGES CXX)
 
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang,GNU>")
 set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
@@ -77,7 +80,7 @@ if(PROJECT_IS_TOP_LEVEL)
     INTERFACE
       "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-pedantic;-Wshadow;-Wunused>>"
       "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>")
-  target_link_libraries(lemac PUBLIC lemac_compiler_warnings)
+  target_link_libraries(lemac PRIVATE lemac_compiler_warnings)
 
   option(LEMAC_SANITIZERS "enables sanitizers" Off)
   if(LEMAC_SANITIZERS)
@@ -108,13 +111,37 @@ if(PROJECT_IS_TOP_LEVEL)
   option(LEMAC_BUILD_TOOL "enables lemac command line tool lemacsum" On)
   if(LEMAC_BUILD_TOOL)
     add_executable(lemacsum src/main.cpp)
-    target_link_libraries(lemacsum PRIVATE lemac)
+    target_link_libraries(lemacsum PRIVATE lemac lemac_compiler_warnings)
     # install(FILES lemacsum.1 TYPE MAN)
     install(TARGETS lemacsum RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif()
-
+  # this is just to avoid an error from cmake, the warnings interface library is
+  # purely internal but it needs to be "installed" here. see
+  # https://gitlab.kitware.com/cmake/cmake/-/issues/19773 for why this is
+  # needed.
+  install(TARGETS lemac_compiler_warnings EXPORT lemacTargets)
   install(
     TARGETS lemac
+    EXPORT lemacTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} FILE_SET public_headers)
+  install(
+    EXPORT lemacTargets
+    FILE lemacTargets.cmake
+    NAMESPACE lemac::
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/cmake/lemac)
+  include(CMakePackageConfigHelpers)
+  export(EXPORT lemacTargets FILE ${CMAKE_INSTALL_DATADIR}/lemacTargets.cmake)
+  configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/lemacConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/lemacConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_DATADIR}/cmake/lemac)
+  write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/lemacConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lemacConfig.cmake"
+                "${CMAKE_CURRENT_BINARY_DIR}/lemacConfigVersion.cmake"
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/cmake/lemac)
+
 endif() # PROJECT_IS_TOP_LEVEL

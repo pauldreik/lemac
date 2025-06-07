@@ -13,6 +13,8 @@ project(
 option(GIT_REPOSITORY "url to repo" "https://github.com/pauldreik/lemac")
 option(GIT_BRANCH "git branch" "main")
 
+# this shows how lemac can be consumed using fetchcontent
+
 include(FetchContent)
 FetchContent_Declare(
   lemac
