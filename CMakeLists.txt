@@ -77,7 +77,7 @@ if(PROJECT_IS_TOP_LEVEL)
     INTERFACE
       "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-pedantic;-Wshadow;-Wunused>>"
       "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>")
-  target_link_libraries(lemac PUBLIC lemac_compiler_warnings)
+  target_link_libraries(lemac PRIVATE lemac_compiler_warnings)
 
   option(LEMAC_SANITIZERS "enables sanitizers" Off)
   if(LEMAC_SANITIZERS)
