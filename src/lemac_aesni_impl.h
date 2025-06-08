@@ -195,7 +195,11 @@ struct compile_time_options {
 };
 
 __m128i AES128_modified(std::span<const __m128i, 11> Ki, __m128i x) {
+#if defined(_MSC_VER)
+  x = _mm_xor_si128(x, Ki[0]);
+#else
   x ^= Ki[0];
+#endif
   x = _mm_aesenc_si128(x, Ki[1]);
   x = _mm_aesenc_si128(x, Ki[2]);
   x = _mm_aesenc_si128(x, Ki[3]);
@@ -210,7 +214,11 @@ __m128i AES128_modified(std::span<const __m128i, 11> Ki, __m128i x) {
 }
 
 __m128i AES128(std::span<const __m128i, 11> Ki, __m128i x) {
+#if defined(_MSC_VER)
+  x = _mm_xor_si128(x, Ki[0]);
+#else
   x ^= Ki[0];
+#endif
   x = _mm_aesenc_si128(x, Ki[1]);
   x = _mm_aesenc_si128(x, Ki[2]);
   x = _mm_aesenc_si128(x, Ki[3]);
@@ -229,6 +237,15 @@ __m128i AES128(std::span<const __m128i, 11> Ki, __m128i x) {
 void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
 
   auto AES128_assist = [](__m128i a, __m128i b) -> __m128i {
+#if defined(_MSC_VER)
+    b = _mm_shuffle_epi32(b, 0xff);
+    __m128i c = _mm_slli_si128(a, 0x4);
+    a = _mm_xor_si128(a, c);
+    c = _mm_slli_si128(c, 0x4);
+    a = _mm_xor_si128(a, c);
+    c = _mm_slli_si128(c, 0x4);
+    a = _mm_xor_si128(a, _mm_xor_si128(c, b));
+#else
     b = _mm_shuffle_epi32(b, 0xff);
     __m128i c = _mm_slli_si128(a, 0x4);
     a ^= c;
@@ -236,6 +253,7 @@ void AES128_keyschedule(const __m128i K, std::span<__m128i, 11> roundkeys) {
     a ^= c;
     c = _mm_slli_si128(c, 0x4);
     a ^= c ^ b;
+#endif
     return a;
   };
 
@@ -328,13 +346,25 @@ inline void process_block(typename lemac::AESNI<variant>::Sstate& S,
   S.S[5] = _mm_aesenc_si128(S.S[4], M0);
 
   S.S[4] = _mm_aesenc_si128(S.S[3], M0);
+#if defined(_MSC_VER)
+  S.S[3] = _mm_aesenc_si128(S.S[2], _mm_xor_si128(R.R1, R.R2));
+#else
   S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+#endif
   S.S[2] = _mm_aesenc_si128(S.S[1], M3);
   S.S[1] = _mm_aesenc_si128(S.S[0], M3);
+#if defined(_MSC_VER)
+  S.S[0] = _mm_xor_si128(S.S[0], _mm_xor_si128(T, M2));
+#else
   S.S[0] = S.S[0] ^ T ^ M2;
+#endif
   R.R2 = R.R1;
   R.R1 = R.R0;
+#if defined(_MSC_VER)
+  R.R0 = _mm_xor_si128(R.RR, M1);
+#else
   R.R0 = R.RR ^ M1;
+#endif
   R.RR = M2;
 }
 
@@ -349,13 +379,25 @@ inline void process_aligned_block(typename lemac::AESNI<variant>::Sstate& S,
   S.S[5] = _mm_aesenc_si128(S.S[4], *(ptr + 0));
 
   S.S[4] = _mm_aesenc_si128(S.S[3], *(ptr + 0));
+#if defined(_MSC_VER)
+  S.S[3] = _mm_aesenc_si128(S.S[2], _mm_xor_si128(R.R1, R.R2));
+#else
   S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+#endif
   S.S[2] = _mm_aesenc_si128(S.S[1], *(ptr + 3));
   S.S[1] = _mm_aesenc_si128(S.S[0], *(ptr + 3));
+#if defined(_MSC_VER)
+  S.S[0] = _mm_xor_si128(S.S[0], _mm_xor_si128(T, *(ptr + 2)));
+#else
   S.S[0] = S.S[0] ^ T ^ *(ptr + 2);
+#endif
   R.R2 = R.R1;
   R.R1 = R.R0;
+#if defined(_MSC_VER)
+  R.R0 = _mm_xor_si128(R.RR, *(ptr + 1));
+#else
   R.R0 = R.RR ^ *(ptr + 1);
+#endif
   R.RR = *(ptr + 2);
 }
 
@@ -371,10 +413,18 @@ process_zero_block(typename lemac::AESNI<variant>::Sstate& S,
   S.S[5] = _mm_aesenc_si128(S.S[4], M);
 
   S.S[4] = _mm_aesenc_si128(S.S[3], M);
+#if defined(_MSC_VER)
+  S.S[3] = _mm_aesenc_si128(S.S[2], _mm_xor_si128(R.R1, R.R2));
+#else
   S.S[3] = _mm_aesenc_si128(S.S[2], R.R1 ^ R.R2);
+#endif
   S.S[2] = _mm_aesenc_si128(S.S[1], M);
   S.S[1] = _mm_aesenc_si128(S.S[0], M);
+#if defined(_MSC_VER)
+  S.S[0] = _mm_xor_si128(S.S[0], T);
+#else
   S.S[0] = S.S[0] ^ T /*^ M2*/;
+#endif
   R.R2 = R.R1;
   R.R1 = R.R0;
   R.R0 = R.RR /*^ M1*/;
@@ -536,6 +586,27 @@ void lemac::AESNI<variant>::LeMacAESNI::finalize_to(
     const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
     auto& S = m_state.s;
+#if defined(_MSC_VER)
+    __m128i T = _mm_xor_si128(N, AES128(m_context.keys[0], N));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<0>(), S.S[0]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<1>(), S.S[1]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<2>(), S.S[2]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<3>(), S.S[3]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<4>(), S.S[4]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<5>(), S.S[5]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<6>(), S.S[6]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<7>(), S.S[7]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<8>(), S.S[8]));
+#else
     __m128i T = N ^ AES128(m_context.keys[0], N);
     T ^= AES128_modified(m_context.template get_subkey<0>(), S.S[0]);
     T ^= AES128_modified(m_context.template get_subkey<1>(), S.S[1]);
@@ -546,7 +617,7 @@ void lemac::AESNI<variant>::LeMacAESNI::finalize_to(
     T ^= AES128_modified(m_context.template get_subkey<6>(), S.S[6]);
     T ^= AES128_modified(m_context.template get_subkey<7>(), S.S[7]);
     T ^= AES128_modified(m_context.template get_subkey<8>(), S.S[8]);
-
+#endif
     const auto tag = AES128(m_context.keys[1], T);
     _mm_storeu_si128((__m128i*)target.data(), tag);
   }
@@ -721,6 +792,27 @@ std::array<uint8_t, 16> lemac::AESNI<variant>::LeMacAESNI::oneshot(
   const auto N = _mm_loadu_si128((const __m128i*)nonce.data());
 
   if constexpr (!compile_time_options::oneshot_uses_tail) {
+#if defined(_MSC_VER)
+    __m128i T = _mm_xor_si128(N, AES128(m_context.keys[0], N));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<0>(), S.S[0]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<1>(), S.S[1]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<2>(), S.S[2]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<3>(), S.S[3]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<4>(), S.S[4]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<5>(), S.S[5]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<6>(), S.S[6]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<7>(), S.S[7]));
+    T = _mm_xor_si128(
+        T, AES128_modified(m_context.template get_subkey<8>(), S.S[8]));
+#else
     __m128i T = N ^ AES128(m_context.keys[0], N);
     T ^= AES128_modified(m_context.template get_subkey<0>(), S.S[0]);
     T ^= AES128_modified(m_context.template get_subkey<1>(), S.S[1]);
@@ -731,7 +823,7 @@ std::array<uint8_t, 16> lemac::AESNI<variant>::LeMacAESNI::oneshot(
     T ^= AES128_modified(m_context.template get_subkey<6>(), S.S[6]);
     T ^= AES128_modified(m_context.template get_subkey<7>(), S.S[7]);
     T ^= AES128_modified(m_context.template get_subkey<8>(), S.S[8]);
-
+#endif
     const auto tag = AES128(m_context.keys[1], T);
     std::array<std::uint8_t, 16> ret;
     _mm_storeu_si128((__m128i*)ret.data(), tag);
