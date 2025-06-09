@@ -1,0 +1,68 @@
+name: windows arm64
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
+      fail-fast: false
+
+      matrix:
+        os: [windows-11-arm]
+        build_type: [Release]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set reusable strings
+      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+    - name: Configure CMake
+      run: >
+        cmake
+        --preset=github-workflow-vcpkg-${{ matrix.os }}
+        -B ${{ steps.strings.outputs.build-output-dir }}
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -A ARM64
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+    - name: Unit test
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: ctest --build-config ${{ matrix.build_type }}
+
+    - name: Run tool
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: ${{ matrix.build_type }}/lemacsum.exe --help
+
+    - name: Run tool against one byte files
+      working-directory: ${{ github.workspace }}/test
+      run: |
+        python3 generate_one_byte_files.py
+        ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.build_type }}/lemacsum.exe --strict --check one_byte_files.lemacsum
+
+    - name: Run benchmark
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: benchmark/${{ matrix.build_type }}/benchmark.exe
+
+    - name: Compare against openssl
+      run: openssl.exe speed -evp AES-128-ECB
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows-arm64-tool
+        path: ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.build_type }}/lemacsum.exe
+  
