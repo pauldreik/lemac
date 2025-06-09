@@ -15,6 +15,14 @@
       "environment": {
         "VCPKG_ROOT": "C:\\vcpkg"
       }
+    },
+    {
+      "name": "github-workflow-vcpkg-windows-11-arm",
+      "inherits": "vcpkg",
+      "generator": "Visual Studio 17 2022",
+      "environment": {
+        "VCPKG_ROOT": "C:\\vcpkg"
+      }
     }
   ]
 }
