@@ -35,6 +35,7 @@ jobs:
         -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -A ARM64
+        -D CMAKE_CROSSCOMPILING=TRUE
         -S ${{ github.workspace }}
 
     - name: Build
