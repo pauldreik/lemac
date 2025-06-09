@@ -34,6 +34,7 @@ jobs:
         --preset=github-workflow-vcpkg-${{ matrix.os }}
         -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -A ARM64
         -S ${{ github.workspace }}
 
     - name: Build
