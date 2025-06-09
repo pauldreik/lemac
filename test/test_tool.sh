@@ -5,7 +5,9 @@
 set -eu
 
 me=$(basename "$0")
+# absolute path to the rootdir of the repo
 rootdir=$(dirname "$0")/..
+rootdir=$(cd "$rootdir" && pwd)
 
 if [ $# -eq 1 ]; then
   # an existing build is to be tested (can be relative or absolute)
@@ -134,6 +136,31 @@ if ! "$tool" --check malformed.txt; then
 fi
 if "$tool" --strict --check malformed.txt; then
   echo "$me: succeded, expected it to fail"
+  exit 1
+fi
+
+# verify the one byte files
+echo "$me: testing all possible one byte files..."
+testdatadir="$rootdir/test/"
+if [ $(ls "$testdatadir"/one_byte_files/ | grep .bin | wc -l) -ne 256 ]; then
+  (
+    cd "$testdatadir"
+    ./generate_one_byte_files.py
+  )
+fi
+# ensure the one byte files are distinct, so nothing fishy is going on with the generation
+cut -f1 -d' ' "$testdatadir"/one_byte_files.lemacsum | sort | uniq >$workdir/tmp
+if [ $(wc -l <tmp) -ne 256 ]; then
+  echo "$me: hashes are not distinct"
+  exit 1
+fi
+(
+  cd "$testdatadir"
+  "$tool" --strict --check one_byte_files.lemacsum >$workdir/one_byte_check
+)
+count=$(grep OK one_byte_check | wc -l)
+if [ $count -ne 256 ]; then
+  echo "$me: failed count, expected 256 but got $count"
   exit 1
 fi
 

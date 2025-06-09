@@ -40,7 +40,7 @@ jobs:
             case "${{ matrix.distro }}" in
               ubuntu*|jessie|stretch|buster|bullseye|bookworm)
                 apt-get update -q -y
-                apt-get install -q -y cmake libfmt-dev catch2 ninja-build g++
+                apt-get install -q -y cmake libfmt-dev catch2 ninja-build g++ python3
                 ;;
               fedora*)
                 dnf -y update
