@@ -1,4 +1,7 @@
+.vs/
+.vscode/
 CMakeLists.txt.user
 build-tool-test/
 build/
 obj-*/
+vcpkg_installed/

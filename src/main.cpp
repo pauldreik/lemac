@@ -8,6 +8,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include <cstdint>
@@ -17,11 +18,13 @@
 
 #include <span>
 
+#if !defined(_MSC_VER)
 // for mmap to work
 #include <fcntl.h>    //open
 #include <sys/mman.h> //mmap
 #include <sys/stat.h> //fstat
 #include <unistd.h>   //close
+#endif
 
 std::string tohex(std::span<const std::uint8_t> binary) {
   std::string ret;
@@ -38,6 +41,7 @@ void usage() {
                "sha256sum\n";
 }
 
+#if !defined(_MSC_VER)
 namespace {
 // RAII for file descriptor
 struct fdcloser {
@@ -168,6 +172,37 @@ std::string checksum(lemac::LeMac& lemac, const std::string& filename) {
 
   return {};
 }
+#else
+std::string checksum(lemac::LeMac& lemac, const std::string& filename) {
+
+  lemac.reset();
+
+  auto impl = [&](auto& ifs) -> std::string {
+    if (!ifs) {
+      std::cerr << "failed opening file " << filename << " for reading.\n";
+      return {};
+    }
+    std::vector<std::uint8_t> buffer(1 << 20);
+    while (ifs) {
+      ifs.read((char*)buffer.data(), buffer.size());
+      lemac.update(std::span(buffer).first(ifs.gcount()));
+    }
+    if (!ifs.eof()) {
+      std::cerr << "failed reading from file " << filename << '\n';
+      return {};
+    }
+    return tohex(lemac.finalize());
+  };
+
+  if (filename == "-") {
+    return impl(std::cin);
+  } else {
+    std::ifstream ifs(filename, std::ios_base::in | std::ios_base::binary);
+    return impl(ifs);
+  }
+}
+
+#endif
 
 struct options {
   // see coreutils sha256sum for explanation of these

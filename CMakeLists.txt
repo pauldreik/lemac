@@ -44,7 +44,7 @@ if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
     src/lemac_aesni_full.cpp
     PROPERTIES
       COMPILE_OPTIONS
-      "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-maes;-mvaes;-mavx512f;-mavx512vl>>$<${msvc_cxx}:$<BUILD_INTERFACE:/arch:FIXME>>"
+      "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-maes;-mvaes;-mavx512f;-mavx512vl>>$<${msvc_cxx}:$<BUILD_INTERFACE:/arch:AVX512>>"
   )
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_AMD64=1)
 elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64|arm64)")

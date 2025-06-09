@@ -6,8 +6,21 @@
  */
 #include "x86_capabilities.h"
 
+#if defined(_MSC_VER)
+// see
+// https://learn.microsoft.com/en-us/cpp/intrinsics/cpuid-cpuidex?view=msvc-170
+#include <array>
+#include <intrin.h>
+#if defined(bit_AES) || defined(bit_VAES) || defined(bit_AVX512F) ||           \
+    defined(bit_AVX512VL)
+#error "bit_AES is already defined"
+#endif
+constexpr auto bit_AES{1U << 25};
+constexpr auto bit_VAES{1U << 9};
+constexpr auto bit_AVX512F{1U << 16};
+constexpr auto bit_AVX512VL{1U << 31};
+#elif defined(__GNUC__) || defined(__clang__)
 // this works on clang and gcc
-#if defined(__GNUC__) || defined(__clang__)
 #include <cpuid.h>
 #else
 #error "fix cpuid support"
@@ -24,7 +37,12 @@ struct cpuidresponse {
 };
 cpuidresponse query_cpuid(const unsigned int leaf, const unsigned int subleaf) {
   cpuidresponse ret{};
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(_MSC_VER)
+  std::array<int, 4> cpui{};
+  static_assert(sizeof(cpui) == sizeof(ret));
+  __cpuidex(cpui.data(), leaf, subleaf);
+  std::memcpy(&ret, cpui.data(), sizeof(ret));
+#elif defined(__GNUC__) || defined(__clang__)
   if (1 != __get_cpuid_count(leaf, subleaf, &ret.eax, &ret.ebx, &ret.ecx,
                              &ret.edx)) {
     throw std::runtime_error("failed running cpuid");
