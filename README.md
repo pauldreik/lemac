@@ -78,17 +78,19 @@ The non-cryptographic xxh reaches about 13.2 GiB/s on the same system.
 
 The AES performance, as measured by `openssl speed -evp AES-128-ECB` is about 3.4 GiB/s.
 
-# Support
+# Hardware and OS support
 
-This code runs with clang(>=16) and gcc (>=12) on amd64 linux. It requires C++20. It may work with earlier compiler versions, but those are not tested in CI.
+The code requires C++20. amd64 (AES-NI) is supported (most current desktop cpus), as well as arm64 with cryptographic extensions (like the current apple hardware and raspberry pi 5). Support for other architectures is planned by providing a non-accelerated fallback implementation.
 
-It should run on any amd64 cpu with aes support, which is most current desktop cpus. It does dynamic dispatch to select between AES-NI and VAES.
+## Linux
+The code runs with clang(>=16) and gcc (>=12). It may work with earlier compiler versions, but those are not tested in CI.
 
-It also runs on arm64 with AES support:
- * raspberry pi 5 (but not earlier versions)
- * apple M1/M2/M3 cpus (of these, only M3 has been tested)
+## Apple
+The code works on apple with xcode and current hardware (apple silicon).
+Apple M1 and M3 have been tested successfully.
 
-Support for other platforms is planned, by providing a non-accelerated fallback.
+## Windows
+amd64 is supported, arm64 is planned.
 
 # Usage
 
