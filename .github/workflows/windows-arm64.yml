@@ -28,8 +28,12 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: Configure CMake
+    - name: install conan
       run: >
+        winget install -e --id JFrog.Conan
+
+    - name: Configure CMake
+      run: >      
         cmake
         -DLEMAC_BUILD_TESTING=Off
         -DLEMAC_BUILD_BENCHMARK=Off
