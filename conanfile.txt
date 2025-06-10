@@ -1,6 +1,6 @@
 [requires]
-fmt
-catch2
+fmt/11
+catch2/3.8
 
 [generators]
 CMakeToolchain
