@@ -27,7 +27,13 @@ target_sources(
          FILES
          include/lemac.h)
 
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
+       message(STATUS "CMAKE_SYSTEM_PROCESSOR is ${CMAKE_SYSTEM_PROCESSOR}")
+       message(STATUS "CMAKE_HOST_SYSTEM_PROCESSOR is ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+       message(STATUS "CMAKE_CROSSCOMPILING is ${CMAKE_CROSSCOMPILING}")
+       message(STATUS "CMAKE_VS_PLATFORM_NAME is ${CMAKE_VS_PLATFORM_NAME}")
+       message(STATUS "CMAKE_GENERATOR_PLATFORM is ${CMAKE_GENERATOR_PLATFORM}")
+
+       if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
   target_sources(
     lemac
     PRIVATE src/lemac_aesni_128.cpp src/lemac_aesni_full.cpp src/lemac_aesni.h
@@ -63,8 +69,7 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64|arm64)")
       "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-march=armv8-a+aes>>$<${msvc_cxx}:$<BUILD_INTERFACE:>>"
   )
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_ARM64=1)
-  find_package(fmt REQUIRED)
-  target_link_libraries(lemac PRIVATE fmt::fmt)
+
 else()
   message(FATAL_ERROR "unrecognized architecture ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
@@ -115,11 +120,13 @@ if(PROJECT_IS_TOP_LEVEL)
     # install(FILES lemacsum.1 TYPE MAN)
     install(TARGETS lemacsum RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif()
-  # this is just to avoid an error from cmake, the warnings interface library is
-  # purely internal but it needs to be "installed" here. see
-  # https://gitlab.kitware.com/cmake/cmake/-/issues/19773 for why this is
-  # needed.
-  install(TARGETS lemac_compiler_warnings EXPORT lemacTargets)
+  # this is just to avoid an error from cmake, the warnings interface library is purely internal but
+  # it needs to be "installed" here. see https://gitlab.kitware.com/cmake/cmake/-/issues/19773 for
+  # why this is needed.
+  install(
+    TARGETS lemac_compiler_warnings
+    EXPORT lemacTargets
+  )
   install(
     TARGETS lemac
     EXPORT lemacTargets
