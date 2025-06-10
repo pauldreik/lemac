@@ -33,10 +33,13 @@ jobs:
     
     - name: Install Conan dependencies
       run: conan install . --build=missing
+      with:
+        cache_packages: true
 
     - name: Configure CMake
       run: >      
         cmake
+        --preset conan-default
         -DLEMAC_BUILD_TESTING=Off
         -DLEMAC_BUILD_BENCHMARK=Off
         -B ${{ steps.strings.outputs.build-output-dir }}

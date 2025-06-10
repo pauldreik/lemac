@@ -1,0 +1,6 @@
+[requires]
+fmt
+catch2
+
+[generators]
+CMakeToolchain
