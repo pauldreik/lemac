@@ -28,9 +28,11 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: install conan
-      run: >
-        winget install -e --id JFrog.Conan
+    - name: Install Conan
+      uses: conan-io/setup-conan@v1
+    
+    - name: Install Conan dependencies
+      run: conan install . --build=missing
 
     - name: Configure CMake
       run: >      
