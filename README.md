@@ -87,10 +87,10 @@ The code runs with clang(>=16) and gcc (>=12). It may work with earlier compiler
 
 ## Apple
 The code works on apple with xcode and current hardware (apple silicon).
-Apple M1 and M3 have been tested successfully.
+Apple M1 and M3 have been tested successfully. No tests have been made with the older apple x86 platforms (if you have tested this, please report how it went!).
 
 ## Windows
-amd64 is supported, arm64 is planned.
+Both amd64 and arm64 are supported. On arm64, there is currently no runtime check for hardware support, it is hard coded to always on.
 
 # Usage
 
