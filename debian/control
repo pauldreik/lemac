@@ -6,7 +6,7 @@ Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
  cmake,
- catch2,
+ catch2|libcatch2-dev,
  libfmt-dev,
 Standards-Version: 4.7.2
 Homepage: https://github.com/pauldreik/lemac
