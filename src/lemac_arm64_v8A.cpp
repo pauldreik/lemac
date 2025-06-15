@@ -233,13 +233,25 @@ void process_block(arm64v8detail::Sstate& S, arm64v8detail::Rstate& R,
   S.S[5] = aesenc(S.S[4], M0);
 
   S.S[4] = aesenc(S.S[3], M0);
+#if defined(_MSC_VER)
+  S.S[3] = aesenc(S.S[2], veorq_u8(R.R1, R.R2));
+#else
   S.S[3] = aesenc(S.S[2], R.R1 ^ R.R2);
+#endif
   S.S[2] = aesenc(S.S[1], M3);
   S.S[1] = aesenc(S.S[0], M3);
+#if defined(_MSC_VER)
+  S.S[0] = veorq_u8(S.S[0], veorq_u8(T, M2));
+#else
   S.S[0] = S.S[0] ^ T ^ M2;
+#endif
   R.R2 = R.R1;
   R.R1 = R.R0;
+#if defined(_MSC_VER)
+  R.R0 = veorq_u8(R.RR, M1);
+#else
   R.R0 = R.RR ^ M1;
+#endif
   R.RR = M2;
 }
 
@@ -259,10 +271,18 @@ void process_zero_block(arm64v8detail::Sstate& S,
   S.S[5] = aesenc_zero(S.S[4]);
 
   S.S[4] = aesenc_zero(S.S[3]);
+#if defined(_MSC_VER)
+  S.S[3] = aesenc(S.S[2], veorq_u8(R.R1, R.R2));
+#else
   S.S[3] = aesenc(S.S[2], R.R1 ^ R.R2);
+#endif
   S.S[2] = aesenc_zero(S.S[1]);
   S.S[1] = aesenc_zero(S.S[0]);
+#if defined(_MSC_VER)
+  S.S[0] = veorq_u8(S.S[0], T); /*^ M2*/
+#else
   S.S[0] = S.S[0] ^ T /*^ M2*/;
+#endif
   R.R2 = R.R1;
   R.R1 = R.R0;
   R.R0 = R.RR /*^ M1*/;
@@ -351,6 +371,19 @@ void LemacArm64v8A::finalize_to(std::span<const uint8_t> nonce,
   const auto N = vld1q_u8(nonce.data());
 
   auto& S = m_state.s;
+
+#if defined(_MSC_VER)
+  uint8x16_t T = veorq_u8(N, AES128(m_context.keys[0], N));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<0>(), S.S[0]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<1>(), S.S[1]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<2>(), S.S[2]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<3>(), S.S[3]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<4>(), S.S[4]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<5>(), S.S[5]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<6>(), S.S[6]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<7>(), S.S[7]));
+  T = veorq_u8(T, AES128_modified(m_context.get_subkey<8>(), S.S[8]));
+#else
   uint8x16_t T = N ^ AES128(m_context.keys[0], N);
   T ^= AES128_modified(m_context.get_subkey<0>(), S.S[0]);
   T ^= AES128_modified(m_context.get_subkey<1>(), S.S[1]);
@@ -361,6 +394,7 @@ void LemacArm64v8A::finalize_to(std::span<const uint8_t> nonce,
   T ^= AES128_modified(m_context.get_subkey<6>(), S.S[6]);
   T ^= AES128_modified(m_context.get_subkey<7>(), S.S[7]);
   T ^= AES128_modified(m_context.get_subkey<8>(), S.S[8]);
+#endif
 
   const auto tag = AES128(m_context.keys[1], T);
   vst1q_u8(target.data(), tag);
