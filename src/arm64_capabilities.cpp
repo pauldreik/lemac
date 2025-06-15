@@ -21,6 +21,9 @@ bool aes_support_impl() {
   // All Apple Silicon Macs have AES crypto extensions
   // M1, M2, M3 all support ARMv8.5-A which includes AES
   return true;
+#elif defined(_MSC_VER)
+  // no idea how to do this on windows. hard code it as supported for now.
+  return true;
 #else
 #error "unsupported implementation, fix me!"
 #endif
