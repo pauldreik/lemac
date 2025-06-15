@@ -27,6 +27,15 @@ target_sources(
          FILES
          include/lemac.h)
 
+# find out which target architecture we are building for.
+if(CMAKE_VS_PLATFORM_NAME)
+  # can't use CMAKE_SYSTEM_PROCESSOR on windows/msvc. it is set to amd64 both on
+  # amd64, amd64 when compiling for arm and on arm when compiling for arm!
+  set(LEMAC_TARGET_ARCHITECTURE ${CMAKE_VS_PLATFORM_NAME})
+else()
+  # on mac os and linux, CMAKE_SYSTEM_PROCESSOR is
+  set(LEMAC_TARGET_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
+endif()
 message(STATUS "CMAKE_SYSTEM_NAME is ${CMAKE_SYSTEM_NAME}")
 message(STATUS "CMAKE_SYSTEM_PROCESSOR is ${CMAKE_SYSTEM_PROCESSOR}")
 message(STATUS "CMAKE_HOST_SYSTEM_PROCESSOR is ${CMAKE_HOST_SYSTEM_PROCESSOR}")
@@ -34,7 +43,7 @@ message(STATUS "CMAKE_CROSSCOMPILING is ${CMAKE_CROSSCOMPILING}")
 message(STATUS "CMAKE_VS_PLATFORM_NAME is ${CMAKE_VS_PLATFORM_NAME}")
 message(STATUS "CMAKE_GENERATOR_PLATFORM is ${CMAKE_GENERATOR_PLATFORM}")
 
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
+if(${LEMAC_TARGET_ARCHITECTURE} MATCHES "(x86_64|AMD64|x64)")
   target_sources(
     lemac
     PRIVATE src/lemac_aesni_128.cpp src/lemac_aesni_full.cpp src/lemac_aesni.h
@@ -54,7 +63,7 @@ if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(x86_64|AMD64)")
       "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-maes;-mvaes;-mavx512f;-mavx512vl>>$<${msvc_cxx}:$<BUILD_INTERFACE:/arch:AVX512>>"
   )
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_AMD64=1)
-elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "(aarch64|ARM64|arm64)")
+elseif(${LEMAC_TARGET_ARCHITECTURE} MATCHES "(aarch64|ARM64|arm64)")
   target_sources(
     lemac
     PRIVATE src/arm64_capabilities.cpp src/arm64_capabilities.h
