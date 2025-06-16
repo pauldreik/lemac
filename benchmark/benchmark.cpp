@@ -5,9 +5,9 @@
  * SPDX-License-Identifier: BSL-1.0
  */
 #include <chrono>
+#include <cstdio>
+#include <string>
 #include <vector>
-
-#include <fmt/format.h>
 
 #include <lemac.h>
 
@@ -83,10 +83,11 @@ results hash(const options& opt) {
 
 void run_testcase(const options& opt) {
   const auto speed = hash(opt);
-  fmt::print("with {:7} byte at a time and strategy {:20}: ", opt.hashsize,
-             to_string(opt.strategy));
-  fmt::print("hashed with {:6.03f} GiB/s {:6.03f} µs/hash\n",
-             speed.data_rate() * 1e-9, speed.hash_rate() * 1e6);
+  std::printf("with %7ld byte at a time and strategy %20s: ",
+              static_cast<long>(opt.hashsize),
+              std::string{to_string(opt.strategy)}.c_str());
+  std::printf("hashed with %6.3f GiB/s %6.3f µs/hash\n",
+              speed.data_rate() * 1e-9, speed.hash_rate() * 1e6);
 }
 
 auto get_compiler() {
@@ -113,6 +114,6 @@ void run_all() {
 }
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
-  fmt::print("compiler: {}\n", get_compiler());
+  std::printf("compiler: %s\n", get_compiler());
   run_all();
 }
