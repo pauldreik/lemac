@@ -63,5 +63,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: windows-amd64-tool
-        path: ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.build_type }}/lemacsum.exe
+        path: |
+          ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.build_type }}/lemacsum.exe
+          ${{ steps.strings.outputs.build-output-dir }}/benchmark/${{ matrix.build_type }}/benchmark.exe
   
