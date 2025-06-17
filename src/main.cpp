@@ -18,7 +18,7 @@
 
 #include <span>
 
-#if !defined(_MSC_VER)
+#if !defined(_WIN32)
 // for mmap to work
 #include <fcntl.h>    //open
 #include <sys/mman.h> //mmap
@@ -41,7 +41,7 @@ void usage() {
                "sha256sum\n";
 }
 
-#if !defined(_MSC_VER)
+#if !defined(_WIN32)
 namespace {
 // RAII for file descriptor
 struct fdcloser {
