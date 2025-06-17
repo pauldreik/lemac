@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.23)
 
 project(
   lemac
-  VERSION 0.0
+  VERSION 0.1
   LANGUAGES CXX)
 
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang,GNU>")

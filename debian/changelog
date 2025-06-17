@@ -1,4 +1,10 @@
-lemac (0.0) UNRELEASED; urgency=medium
+lemac (0.1) unstable; urgency=medium
+
+  * remove use of fmt (not externally visible)
+
+ -- Paul Dreik <github@pauldreik.se>  Tue, 17 Jun 2025 18:18:11 +0200
+
+lemac (0.0) unstable; urgency=medium
 
   * Initial release.
 
