@@ -1,7 +1,9 @@
 #include "lemac_arm64_v8A.h"
 #include "lemac.h"
+#include <bit>
 #include <cassert>
 #include <fmt/core.h>
+#include <cstring>
 #include <iostream>
 
 // this was useful for understanding how to work with neon:
