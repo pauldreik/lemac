@@ -2,6 +2,7 @@
 .vscode/
 CMakeLists.txt.user
 build-tool-test/
+build-mingw64/
 build/
 obj-*/
 vcpkg_installed/
