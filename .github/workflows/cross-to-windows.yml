@@ -1,0 +1,41 @@
+name: cross compile to windows amd64 using mingw
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: cross compile to windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          sudo apt update
+          sudo apt install -y g++-mingw-w64-x86-64-win32 ninja-build cmake
+          scripts/cross_compile_to_windows.sh
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: mingw_binaries
+          path: |
+            build-mingw64/lemacsum.exe
+            build-mingw64/benchmark/benchmark.exe
+
+  test:
+    name: test on windows
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: download binaries from first job
+        uses: actions/download-artifact@v4
+        with:
+          name: mingw_binaries
+      - shell: bash
+        run: |
+          ls -lah
+          benchmark/benchmark.exe
+
