@@ -7,7 +7,6 @@ Build-Depends:
  debhelper-compat (= 13),
  cmake,
  catch2|libcatch2-dev,
- libfmt-dev,
 Standards-Version: 4.7.2
 Homepage: https://github.com/pauldreik/lemac
 Vcs-Browser: https://github.com/pauldreik/lemac
