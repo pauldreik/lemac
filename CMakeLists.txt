@@ -79,8 +79,6 @@ elseif(${LEMAC_TARGET_ARCHITECTURE} MATCHES "(aarch64|ARM64|arm64)")
       "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-march=armv8-a+aes>>$<${msvc_cxx}:$<BUILD_INTERFACE:>>"
   )
   target_compile_definitions(lemac PRIVATE LEMAC_ARCH_IS_ARM64=1)
-  find_package(fmt REQUIRED)
-  target_link_libraries(lemac PRIVATE fmt::fmt)
 else()
   message(FATAL_ERROR "unrecognized architecture ${CMAKE_SYSTEM_PROCESSOR}")
 endif()

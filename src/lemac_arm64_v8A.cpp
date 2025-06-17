@@ -1,7 +1,8 @@
 #include "lemac_arm64_v8A.h"
 #include "lemac.h"
+#include <bit>
 #include <cassert>
-#include <fmt/core.h>
+#include <cstring>
 #include <iostream>
 
 // this was useful for understanding how to work with neon:
@@ -110,49 +111,29 @@ void AES128_keyschedule(const uint8x16_t K,
   }
 }
 
-void print(auto label, uint8x16_t x) {
-  std::array<std::uint8_t, 16> tmp;
-  vst1q_u8(tmp.data(), x);
-  fmt::print("{}\n", label);
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 4; ++j) {
-      fmt::print("{:02x} |", +tmp[i + j * 4]);
-    }
-    fmt::print("{}\n", "");
-  }
-  std::cout.flush();
-}
-
 uint8x16_t AES128(std::span<const uint8x16_t, 11> roundkeys, uint8x16_t x) {
   // see Algorithm 1 in FIPS-197
-  // print("input data", x);
   for (int round = 1; round < 10; ++round) {
     // vaeseq_u8 is subbytes(shiftrows(a^b))
     x = vaeseq_u8(x, roundkeys[round - 1]);
-    // print("after addround, shiftrow, subbytes:", x);
     //  mixcolumns
     x = vaesmcq_u8(x);
-    // print("after mixcolumns", x);
   }
   // subbytes(shiftrows(addround))
   x = vaeseq_u8(x, roundkeys[9]);
   // addround
   x = veorq_u8(x, roundkeys[10]);
-  // print("when finished", x);
   return x;
 }
 
 uint8x16_t AES128_modified(std::span<const uint8x16_t, 11> roundkeys,
                            uint8x16_t x) {
   // see Algorithm 1 in FIPS-197
-  // print("input data", x);
   for (int round = 1; round < 10; ++round) {
     // vaeseq_u8 is subbytes(shiftrows(a^b))
     x = vaeseq_u8(x, roundkeys[round - 1]);
-    // print("after addround, shiftrow, subbytes:", x);
     //  mixcolumns
     x = vaesmcq_u8(x);
-    // print("after mixcolumns", x);
   }
   // subbytes(shiftrows(addround))
   x = vaeseq_u8(x, roundkeys[9]);
