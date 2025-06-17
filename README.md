@@ -11,7 +11,7 @@ The AESNI implementation is based on the public domain code in [https://github.c
 The bulk speed on a single core is up to about
 
   * 77 GiB/s, 0.067 cycles per byte (AMD zen 4, Debian 13 Trixie)
-  * 44 GiB/s (Apple M3 MacBook Air, macos) 
+  * 48 GiB/s (Apple M4 MacBook Air, macos) 
   * 11 GiB/s, 0.19 cycles per byte (raspberry pi 5, Ubuntu 24.04)
 
 The speed is measured with the included benchmark and using `perf stat` to get the average clock frequency during the test. To build and run the benchmark:
@@ -47,7 +47,24 @@ This can be compared with some other interesting hashes
 
 The AES performance, as measured by `openssl speed -evp AES-128-ECB` is about 16.4 GiB/s.
 
-## Results on a Apple M3 MacBook Air
+## Results on an Apple M4 MacBook Air
+
+Here are the results from a single run with default power settings plugged in to the charger, if that matters. There is some run to run variation, take this with a grain of salt.
+
+```
+compiler: clang
+with       1 byte at a time and strategy  update_and_finalize: hashed with  0.038 GiB/s  0.027 µs/hash
+with    1024 byte at a time and strategy  update_and_finalize: hashed with 23.408 GiB/s  0.044 µs/hash
+with   16384 byte at a time and strategy  update_and_finalize: hashed with 45.351 GiB/s  0.361 µs/hash
+with  262144 byte at a time and strategy  update_and_finalize: hashed with 47.915 GiB/s  5.471 µs/hash
+with 1048576 byte at a time and strategy  update_and_finalize: hashed with 47.990 GiB/s 21.850 µs/hash
+with       1 byte at a time and strategy              oneshot: hashed with  0.021 GiB/s  0.049 µs/hash
+with    1024 byte at a time and strategy              oneshot: hashed with 17.128 GiB/s  0.060 µs/hash
+with   16384 byte at a time and strategy              oneshot: hashed with 43.223 GiB/s  0.379 µs/hash
+with  262144 byte at a time and strategy              oneshot: hashed with 47.394 GiB/s  5.531 µs/hash
+with 1048576 byte at a time and strategy              oneshot: hashed with 47.653 GiB/s 22.005 µs/hash
+```
+## Results on an Apple M3 MacBook Air
 
 Here are the results from a single run with default power settings plugged in to the charger, if that matters. There is some run to run variation, take this with a grain of salt.
 
@@ -87,7 +104,7 @@ The code runs with clang(>=16) and gcc (>=12). It may work with earlier compiler
 
 ## Apple
 The code works on apple with xcode and current hardware (apple silicon).
-Apple M1 and M3 have been tested successfully. No tests have been made with the older apple x86 platforms (if you have tested this, please report how it went!).
+Apple M1, M3 and M4 have been tested successfully. No tests have been made with the older apple x86 platforms (if you have tested this, please report how it went!).
 
 ## Windows
 Both amd64 and arm64 are supported. On arm64, there is currently no runtime check for hardware support, it is hard coded to always on.
